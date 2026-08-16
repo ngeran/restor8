@@ -1,0 +1,76 @@
+# restor8-inventory Deployment.
+#
+# Same safe-by-default posture as connector, plus the one stateful bit of
+# the whole platform: the SQLite file lives on a PVC (local-path) mounted
+# at /data. INVENTORY_DB points the app there; locally (`just run`) it
+# defaults to a file in the cwd instead.
+#
+# No lab-auth env here on purpose — inventory never touches devices.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restor8-inventory
+  namespace: restor8
+  labels:
+    app: restor8-inventory
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restor8-inventory
+  template:
+    metadata:
+      labels:
+        app: restor8-inventory
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000          # chowns the local-path volume for UID 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restor8-inventory
+          image: localhost:5000/restor8-inventory:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: INVENTORY_DB
+              value: /data/inventory.db
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: restor8-inventory

@@ -7,3 +7,8 @@ result-*
 .venv/
 __pycache__/
 *.pyc
+
+# Local dev databases (inventory etc.)
+*.db
+*.db-wal
+*.db-shm

@@ -34,10 +34,24 @@ early, prove it often.
       `kubectl logs`. Deploy runbook recorded in CLAUDE.md.
 
 ## Phase 1 — Inventory
-- [ ] Scaffold `services/inventory`, SQLite schema: devices
+- [x] Scaffold `services/inventory`, SQLite schema: devices
       (name, mgmt_ip, platform, port, auth_ref, containerlab_node, created_at).
-- [ ] CRUD API + `just test` smoke (build image → run → curl → 200).
-- [ ] **Checkpoint:** register actual lab devices via the API, list them back.
+- [x] CRUD API + `just test` smoke (build image → run → curl → 200).
+      SQLite on a PVC (`/data`, local-path, 512Mi) — proven to survive pod
+      deletion. Default DB path `/tmp/inventory.db` (read-only-rootfs safe).
+- [x] **Checkpoint:** registered ALL 10 lab cRPDs via the API, listed back.
+      **DISCOVERY:** the lab already runs *inside k3s* (ns `topology`) — each
+      node has a ClusterIP svc exposing NETCONF :830 (+ `-host` NodePorts
+      31xxx/SSH and 32xxx/NETCONF, + `-vx` VXLAN data-plane svcs). Inventory
+      stores cluster-DNS addresses (`p1.topology.svc.cluster.local:830`) —
+      verified working from the connector pod for P-1 (facts returned).
+      P-1 auth: admin/manolis1 (the `lab-auth` Secret). **Open:** creds for
+      p2-p4/pe/rr/ce differ (ConnectAuthError on p2) — verify each node's
+      real hostname via connector facts and PATCH when known; names beyond
+      P-1 are assumed from the service-name convention.
+      **Phase 4 impact:** topology awareness should likely WATCH the
+      `topology` namespace (kubectl/ownerReferences) instead of parsing
+      containerlab YAML — decide there.
 
 ## Phase 2 — Backup
 - [ ] Scaffold `services/backup` (calls connector over HTTP, never imports PyEZ).

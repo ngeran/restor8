@@ -1,0 +1,17 @@
+# ClusterIP for restor8-inventory — other services resolve devices by ID
+# through here (http://restor8-inventory:8080).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restor8-inventory
+  namespace: restor8
+  labels:
+    app: restor8-inventory
+spec:
+  selector:
+    app: restor8-inventory
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

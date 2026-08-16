@@ -1,0 +1,12 @@
+# inventory — device registry (SQLite CRUD). Knows WHAT devices exist and
+# how to address them (mgmt_ip/port/auth_ref); never opens sessions itself
+# (connector's job). VIRTUAL uv member like the other services.
+[project]
+name = "restor8-inventory"
+version = "0.1.0"
+description = "Device inventory for restor8: SQLite registry of lab nodes"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+]

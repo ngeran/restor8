@@ -47,6 +47,7 @@
       # keys off these names. Image/deploy names: restor8-<name>.
       serviceApps = {
         connector = ./services/connector/app;
+        inventory = ./services/inventory/app;
       };
 
       # Per-system: pkgs + the uv2nix python set shared by every service.

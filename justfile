@@ -39,10 +39,12 @@ deploy svc="connector": (push svc)
       exit 1
     }
 
-# Run locally from the devShell venv — the SAME entrypoint the image runs
-# (uvicorn main:app from services/<svc>/app), with --reload for iteration.
+# Run locally — the SAME entrypoint the image runs (uvicorn main:app from
+# services/<svc>/app) with --reload. Enters the service's OWN devshell
+# first so each service runs against its own venv, no matter which
+# devshell your terminal happens to be in.
 run svc="connector":
-    cd services/{{svc}}/app && uvicorn main:app --reload --port 8080
+    nix develop .#{{svc}} -c bash -c 'cd services/{{svc}}/app && uvicorn main:app --reload --port 8080'
 
 # Tail the service's deployment logs (Job pods: kubectl logs job/<name>).
 logs svc="connector":
@@ -90,13 +92,18 @@ test svc="connector": (build svc)
     echo "test: ok"
 
 # Lint + type-check everything (the image build doesn't lint). ruff is
-# strict. mypy resolves third-party imports against the devShell venv
-# (--python-executable) — run from inside the devShell (direnv or `just shell`).
+# strict. mypy runs per service against that service's own venv so each
+# one sees exactly its dependencies (libs are checked with every service).
 check:
     #!/usr/bin/env bash
     set -euo pipefail
     ruff check libs services
-    mypy --python-executable "$(command -v python)" libs/restor8_core/src services/connector/app
+    for d in services/*/app; do
+      svc="$(basename "$(dirname "$d")")"
+      echo "── mypy [$svc]"
+      nix develop .#"$svc" -c bash -c \
+        "mypy --python-executable \"\$(command -v python)\" libs/restor8_core/src $d"
+    done
 
 # Drop into the default devShell manually (direnv does this on cd).
 shell:

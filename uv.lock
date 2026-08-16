@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 members = [
     "restor8-connector",
     "restor8-core",
+    "restor8-inventory",
 ]
 
 [[package]]
@@ -826,6 +827,21 @@ dependencies = [
 requires-dist = [
     { name = "junos-eznc", specifier = ">=2.6" },
     { name = "pydantic", specifier = ">=2" },
+]
+
+[[package]]
+name = "restor8-inventory"
+version = "0.1.0"
+source = { virtual = "services/inventory" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi" },
+    { name = "uvicorn" },
 ]
 
 [[package]]
