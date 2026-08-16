@@ -1,0 +1,88 @@
+# restor8-connector Deployment.
+#
+# image + imagePullPolicy match the justfile push target (localhost:5000).
+# Always is required: the tag is fixed (:latest) and re-pushed, so Always
+# forces k3s to fetch the newest digest each rollout.
+#
+# LAB_USER/LAB_PASSWORD come from the shared lab credential
+# (Secret restor8/lab-auth — see justfile doctor for the create command).
+# `optional: true` so the pod still starts without the secret; POST
+# /connect then returns 422 until it exists or the request carries creds.
+#
+# Safe-by-default: non-root (UID 1000, matches flake.nix config.User),
+# read-only root fs (emptyDir /tmp for temp writes), all capabilities
+# dropped, no privilege escalation, seccomp=RuntimeDefault, resource
+# limits, and /healthz probes.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restor8-connector
+  namespace: restor8
+  labels:
+    app: restor8-connector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restor8-connector
+  template:
+    metadata:
+      labels:
+        app: restor8-connector
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restor8-connector
+          image: localhost:5000/restor8-connector:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: LAB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: lab-auth
+                  key: LAB_USER
+                  optional: true
+            - name: LAB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lab-auth
+                  key: LAB_PASSWORD
+                  optional: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

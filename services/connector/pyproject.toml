@@ -1,0 +1,17 @@
+# connector — the only service that opens NETCONF sessions to devices.
+# VIRTUAL member (no build-system): the app code in app/ is copied into the
+# image at /app by flake.nix, exactly like the single-service template —
+# uv2nix builds only this venv's dependencies (which include restor8-core).
+[project]
+name = "restor8-connector"
+version = "0.1.0"
+description = "Owns all live PyEZ/NETCONF sessions; every other service reaches devices through its API"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "restor8-core",
+]
+
+[tool.uv.sources]
+restor8-core = { workspace = true }

@@ -1,0 +1,33 @@
+# restor8 — uv workspace root (VIRTUAL on purpose: no [project] here).
+#
+# One uv.lock governs every member, so libs/restor8_core and all services
+# share a single resolved dependency set. Each service builds its own venv
+# from this lock via uv2nix (see flake.nix) — the same "dev shell and image
+# share one venv" guarantee as the single-service template, now across the
+# whole monorepo. This layout exists because a per-service flake cannot
+# reference ../../libs (flake evaluation is rooted at the flake directory),
+# so sharing restor8_core any other way would force vendoring it into every
+# service (decision recorded in TODO.md, 2026-08-16).
+#
+# Add a service: create services/<name>/pyproject.toml (virtual member, no
+# build-system), add it to flake.nix's `services` list, create
+# manifests/<name>/, then:  nix run nixpkgs#uv -- lock   (or `uv lock`)
+[tool.uv.workspace]
+members = ["libs/*", "services/*"]
+
+# uv2nix build config (read from the workspace root at flake evaluation;
+# uv itself ignores it). ncclient ships only an sdist whose PEP-517 build
+# imports setuptools — declare it so uv2nix adds it to that build only.
+# NOTE: keys are lock package NAMES, not name-version (the uv error hint
+# inside the build log suggests "ncclient-0.7.0" — that key never matches).
+[tool.uv.extra-build-dependencies]
+ncclient = ["setuptools"]
+
+# mypy: run via `just check`, which passes --python-executable pointing at
+# the devShell venv so third-party packages resolve. PyEZ ships no stubs.
+[tool.mypy]
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = ["jnpr.*"]
+ignore_missing_imports = true

@@ -1,0 +1,6 @@
+# restor8 namespace — applied by `just deploy` before any service manifest.
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: restor8

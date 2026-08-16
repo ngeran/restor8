@@ -1,0 +1,24 @@
+# restor8-core — the shared library every service installs via the uv
+# workspace (`restor8-core = { workspace = true }` in each service's
+# pyproject). Unlike the services, this IS a real installable package
+# (build-system present) because it must land inside every service venv.
+#
+# This is the ONLY place junos-pyEZ is declared. Services other than
+# connector never even have it on their path — that is the architectural
+# enforcement of "connector is the only service that touches devices".
+[project]
+name = "restor8-core"
+version = "0.1.0"
+description = "Shared core for restor8: typed PyEZ wrapper, progress events, models"
+requires-python = ">=3.11"
+dependencies = [
+    "junos-eznc>=2.6",   # PyEZ — PyPI dist name; imports as jnpr.junos
+    "pydantic>=2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/restor8_core"]

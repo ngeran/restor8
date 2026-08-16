@@ -1,0 +1,18 @@
+# ClusterIP for restor8-connector — the internal API every other restor8
+# service calls to reach devices (they never open NETCONF sessions themselves).
+# Gateway (Phase 6) proxies REST + WS through here.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restor8-connector
+  namespace: restor8
+  labels:
+    app: restor8-connector
+spec:
+  selector:
+    app: restor8-connector
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
