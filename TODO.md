@@ -88,20 +88,35 @@ early, prove it often.
       `GET /backup/{id}/config/{sha}`.
       JSNAPy quirks (JSNAPY_HOME, two-file config, its %-bug at jsnapy.py:795,
       stock logging.yml killing our loggers) are encapsulated in the runner.
-- [ ] **Checkpoint:** break p3's BGP intentionally, restore from last good
-      backup, JSNAPy green + BGP reconverges. **BLOCKED on the data-plane
-      question:** the lab (clabernetes, ns `topology`) has no inter-node
-      links configured — eth1–5 exist unconnected (p2↔p3 eBGP over
-      10.99.23.0/30 stayed `Active`); the `-vx` services look like prepared
-      VXLAN endpoints (ports 4799/14789) with nothing wired. Baseline
-      eBGP/lo0 configs pushed to p2/p3 via /push are staged and committed
-      on the devices.
+- [x] **Checkpoint PASSED 2026-08-16** — broke p3 (deleted AS + lo0 baseline
+      via set-format /push), restore without approval → 403 (gate works),
+      `POST /restore/7/latest?approve=true` → override push on a held
+      session → config-match validation green → confirmed commit →
+      `restored: true`. JSNAPy variant is exercised by Phase 5 (needs live
+      BGP; runner itself is already live-verified). Bugs found by the
+      checkpoint: stale backup image (config@sha undeployed), restore's
+      HTTP helper GETing POST-only session routes, finally-unlock masking
+      real errors (cRPD closes the candidate DB after confirming commit —
+      unlock now best-effort), PyEZ rollback kwarg (`rb_id=`), and Junos
+      text-parser quirks (needs spaces between `}}`; `delete` lines only
+      valid in set-format loads → topology payloads are set-format now).
 
 ## Phase 4 — Topology awareness
-- [ ] Scaffold `services/topology`: parse Containerlab `.clab.yml`, map node
-      names → inventory (auto-register unknown nodes as candidates).
-- [ ] **Checkpoint:** point at an existing 10-node MPLS topology; every node
-      resolves to a reachable mgmt IP.
+- [x] Scaffold `services/topology` — RESHAPED (see Phase 1 discovery): the
+      lab is clabernetes-in-k8s with all nodes already in inventory, so
+      instead of parsing containerlab YAML the service owns a declarative
+      plan checked into the repo (`services/topology/app/topologies/
+      mpls-core.yml`: nodes with role/asn/loopback/cleanup, intended links,
+      `underlay: flat-podnet` until a real fabric is wired).
+- [x] Endpoints: `GET /topology` (plan), `GET /topology/reconcile`
+      (plan ↔ inventory diff), `POST /topology/apply` (per-node baseline
+      push via connector — set-format payload: cleanup deletes + lo0 + AS;
+      idempotent).
+- [x] **Checkpoint PASSED 2026-08-16** — reconcile: 10/10 planned nodes
+      registered, ready. apply: **all 10 lab devices configured through
+      the app** (10/10 ok; p2/p3 also cleaned of hand-staged Phase 2/3
+      recon config). All 10 backed up into Git history immediately after
+      (fresh app-era baseline commits per device).
 
 ## Phase 5 — Scenario engine
 - [ ] Scaffold `services/scenario`: scenario = YAML (protocol, target nodes,

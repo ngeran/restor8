@@ -50,6 +50,7 @@
         inventory = ./services/inventory/app;
         backup = ./services/backup/app;
         restore = ./services/restore/app;
+        topology = ./services/topology/app;
       };
 
       # Per-system: pkgs + the uv2nix python set shared by every service.

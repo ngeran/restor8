@@ -334,10 +334,17 @@ class JunosConnection:
             raise
         finally:
             if locked:
-                with self._guard(Stage.UNLOCKING):
-                    # equivalent to: exiting configuration mode (releases lock)
+                # Best-effort on purpose: after a confirming commit some
+                # platforms (cRPD) close the candidate DB, and a raising
+                # unlock here would REPLACE the real outcome of the push
+                # (successful or failed) with UnlockError noise. Session
+                # close releases any residual lock regardless.
+                try:
                     self._events.emit(Stage.UNLOCKING, "releasing candidate lock")
                     cu.unlock()
+                except Exception as exc:  # noqa: BLE001 — see comment
+                    self._events.emit(Stage.UNLOCKING, f"unlock skipped: {exc}")
+                locked = False
 
     def confirm_commit(self, comment: str = "restor8: confirmed good") -> None:
         """Finalise a confirmed commit before its window expires.
@@ -383,7 +390,7 @@ class JunosConnection:
                 locked = True
             with self._guard(Stage.ROLLING_BACK):
                 # equivalent to: rollback 0  (discard back to last committed)
-                cu.rollback(rb=0)
+                cu.rollback(rb_id=0)
                 diff = cu.diff() or ""
                 self._events.emit(Stage.ROLLING_BACK, "rollback 0 loaded", diff=diff)
                 # equivalent to: commit comment "restor8: rollback"
@@ -397,8 +404,10 @@ class JunosConnection:
             raise
         finally:
             if locked:
-                with self._guard(Stage.UNLOCKING):
+                try:
                     cu.unlock()
+                except Exception as exc:  # noqa: BLE001 — same as push_config
+                    self._events.emit(Stage.UNLOCKING, f"unlock skipped: {exc}")
 
     # ── internals ────────────────────────────────────────────────────
 
@@ -466,7 +475,7 @@ class JunosConnection:
         """
         try:
             if locked:
-                cu.rollback(rb=0)  # equivalent to: rollback 0 (discard candidate)
+                cu.rollback(rb_id=0)  # equivalent to: rollback 0 (discard candidate)
         except Exception as exc:  # noqa: BLE001 — recovery is best-effort
             self._events.emit(Stage.ERROR, f"discard-candidate failed: {exc}")
         finally:

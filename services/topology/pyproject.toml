@@ -1,0 +1,16 @@
+# topology — the lab's intended shape, as code (Phase 4).
+# The topology DEFINITION is a YAML file checked into the repo (reviewed
+# like code, per spec §2); the service reconciles it against inventory
+# and APPLIES per-node baseline config through connector — restor8
+# configures the lab, never a human CLI.
+[project]
+name = "restor8-topology"
+version = "0.1.0"
+description = "Topology plan: nodes/roles/links, reconcile vs inventory, apply via connector"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "pyyaml",
+]

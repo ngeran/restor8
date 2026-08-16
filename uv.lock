@@ -9,6 +9,7 @@ members = [
     "restor8-core",
     "restor8-inventory",
     "restor8-restore",
+    "restor8-topology",
 ]
 
 [[package]]
@@ -986,6 +987,25 @@ requires-dist = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "restor8-core", editable = "libs/restor8_core" },
+    { name = "uvicorn" },
+]
+
+[[package]]
+name = "restor8-topology"
+version = "0.1.0"
+source = { virtual = "services/topology" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "pyyaml" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 

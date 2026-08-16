@@ -94,14 +94,20 @@ def _device(device_id: int) -> dict[str, object]:
     return r.json()
 
 
-def _call(url: str, json_: dict[str, object] | None = None) -> httpx.Response:
-    """POST/GET helper mapping connector/backup failures to 502 passthrough."""
+def _call(
+    url: str, json_: dict[str, object] | None = None, *, post: bool = False
+) -> httpx.Response:
+    """HTTP helper mapping connector/backup failures to 502 passthrough.
+
+    ``post=True`` forces POST for body-less calls (confirm/rollback) —
+    without it they'd GET a POST-only route and surface as a confusing
+    wrapped "Method Not Allowed".
+    """
     try:
-        r = (
-            httpx.post(url, json=json_, timeout=300)
-            if json_ is not None
-            else httpx.get(url, timeout=300)
-        )
+        if json_ is not None or post:
+            r = httpx.post(url, json=json_, timeout=300)
+        else:
+            r = httpx.get(url, timeout=300)
     except httpx.HTTPError as exc:
         raise HTTPException(502, f"upstream unreachable ({url}): {exc}") from exc
     if r.status_code >= 400:
@@ -276,14 +282,14 @@ def restore_push(
 
     # ── confirm or roll back on the SAME held session ──
     if validation.passed:
-        _call(f"{CONNECTOR_URL}/session/{session_id}/confirm")
+        _call(f"{CONNECTOR_URL}/session/{session_id}/confirm", post=True)
         return RestoreResult(
             device=str(device["name"]),
             sha=str(backup["sha"]),
             restored=True,
             validation=validation,
         )
-    rollback = _call(f"{CONNECTOR_URL}/session/{session_id}/rollback").json()
+    rollback = _call(f"{CONNECTOR_URL}/session/{session_id}/rollback", post=True).json()
     return RestoreResult(
         device=str(device["name"]),
         sha=str(backup["sha"]),
