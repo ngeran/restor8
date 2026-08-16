@@ -1,0 +1,74 @@
+# React app Deployment (nginx serving the built SPA).
+# nginx listens on :8080 (non-root can't bind <1024); the Service fronts it on :80.
+#
+# Safe-by-default: non-root (UID 1000, matches flake.nix config.User), read-only
+# root fs (emptyDirs at /tmp + nginx cache/log dirs), all capabilities dropped,
+# no privilege escalation, seccomp=RuntimeDefault, resource limits, / (200) probes.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restor8-frontend
+  namespace: restor8
+  labels:
+    app: restor8-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restor8-frontend
+  template:
+    metadata:
+      labels:
+        app: restor8-frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restor8-frontend
+          image: localhost:5000/restor8-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          livenessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-log
+              mountPath: /var/log/nginx
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-log
+          emptyDir: {}

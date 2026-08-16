@@ -1,10 +1,11 @@
-# restor8 Ingress — host-based routing via k3s's Traefik.
-# From the host browser after /etc/hosts maps these names to the node IP:
-#   http://connector.restor8.home   → connector API + /docs (Swagger)
-#   http://inventory.restor8.home   → inventory API + /docs
-# (Phase 7's frontend will join as http://restor8.home.)
-# Host-based on purpose: path-prefix routing would need per-service
-# root_path wiring for OpenAPI to resolve correctly.
+# restor8 Ingress — via k3s's Traefik.
+#
+#   http://restor8.home            → the SPA (frontend)
+#   http://restor8.home/api/*, /ws → the gateway (same origin — no CORS,
+#                                    WS included)
+#   http://connector.restor8.home / inventory.restor8.home → service docs
+#
+# Hostnames need /etc/hosts (or LAN DNS) → this node.
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -13,6 +14,27 @@ metadata:
   namespace: restor8
 spec:
   rules:
+    - host: restor8.home
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: restor8-gateway
+                port: { name: http }
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: restor8-gateway
+                port: { name: http }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: restor8-frontend
+                port: { name: http }
     - host: connector.restor8.home
       http:
         paths:

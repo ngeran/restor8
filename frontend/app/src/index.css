@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+/* restor8 design tokens (spec §3 — mockup palette, Obsidian-Core family) */
+@theme {
+  --color-base: #0a0e17;
+  --color-panel: #0f131c;
+  --color-card: #131a2b;
+  --color-edge: #1e2a45;
+  --color-accent: #00d4ff;
+  --color-accent-soft: #a8e8ff;
+  --color-secondary: #d2bbff;
+  --color-ok: #10b981;
+  --color-warn: #f59e0b;
+  --color-err: #ef4444;
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+  --radius-card: 0.25rem;
+}
+
+body {
+  background: var(--color-base);
+  color: #cdd6f4;
+  font-family: var(--font-sans);
+}
+
+/* glow = signal (live/active), not decoration */
+.glow-accent { box-shadow: 0 0 12px rgba(0, 212, 255, 0.35); }
+.glow-ok     { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
+.glow-err    { box-shadow: 0 0 12px rgba(239, 68, 68, 0.35); }

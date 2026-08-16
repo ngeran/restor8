@@ -1,0 +1,4 @@
+# Cloudflare Pages SPA fallback (deployed to the dist root by Vite).
+# Mirrors the nginx `try_files $uri $uri/ /index.html` fallback the k3s image
+# uses: serve index.html for any client-side route, so deep links + refresh work.
+/*    /index.html   200

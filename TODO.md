@@ -163,12 +163,25 @@ early, prove it often.
       Gateway ingested 300+ events across the run.
 
 ## Phase 7 — Frontend
-- [ ] Scaffold `frontend/` (React + Tailwind v4, `nix flake init -t ~/.omni-nix#react`).
-- [ ] Screens in order: Dashboard → Devices → Configurations (git diff +
-      history + revert, against real Phase 2/3 API) → Topology (draggable
-      canvas, live status via gateway WS). Design tokens per §3.
-- [ ] **Checkpoint:** each screen wired to its real backend before the next;
-      no screen ships against fixtures only.
+- [x] Scaffold `frontend/` (omni-nix react template — own flake/justfile,
+      Vite + React + TypeScript + Tailwind v4; `just relock` for npmDepsHash).
+- [x] Screens: Dashboard (summary cards, run list + start button, live
+      event ticker over WS), Devices (inventory table with plan roles),
+      Configurations (device → commit history → unified diff, red/green
+      blocks + line numbers, "in sync" state), Topology (draggable SVG,
+      ring layout by role, links + nodes glow accent on live WS events).
+      Design tokens per §3 (bg/card/border/accent palette, mono/sans
+      stacks, 0.25rem radius, glow-as-signal).
+- [x] **Checkpoint PASSED 2026-08-16** — same-origin wiring via Ingress:
+      `restor8.home/` → SPA, `/api/*` → gateway, `/ws` → gateway (101
+      upgrade verified). `/api/devices` returns the live registry through
+      the SPA origin; dev parity via vite proxy (:5173 → gateway
+      port-forward). Run 14 started through the gateway API exactly as
+      the UI does. Restore's approve/revert buttons: Phase 8 polish.
+      Gotchas banked: nested frontend flake needs `git add -A` like
+      everything else; template manifests ship react-app names + default
+      ns — renamed to restor8-frontend/ns restor8; Traefik needs a few
+      seconds to reconcile new path rules.
 
 ## Phase 8 — Deploy + harden
 - [ ] `manifests/` per service in ns `restor8`, Ingress `restor8.home`

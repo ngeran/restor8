@@ -1,0 +1,141 @@
+# =========================================================================
+# build → push → rollout for the react app
+# =========================================================================
+# k3s (default):  requires omni-nix's k3s cluster + local registry
+#                 (127.0.0.1:5000) running — k3s is on-demand, start it first:
+#                   sudo systemctl start k3s
+# Cloudflare Pages (public URL):  `just cf` uploads the Nix-built static app.
+#   one-time:  wrangler login   (or: export CLOUDFLARE_API_TOKEN=…)
+#              wrangler pages project create react-app --production-branch main
+#
+# ⚠️ First-time only: set npmDepsHash in flake.nix (see its header comment).
+# =========================================================================
+set shell := ["bash", "-c"]
+
+image := "localhost:5000/restor8-frontend"
+tag   := "latest"
+ns    := "restor8"
+dep   := "restor8-frontend"
+port  := "8080"          # nginx container listen port (non-root high port)
+cf_project := "restor8"   # Cloudflare Pages project name (create once, see header)
+
+# Build the Nix image (no Dockerfile, no docker).
+build:
+    nix build .#image --out-link result
+
+# Push to the local registry over HTTP (no docker).
+push: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    skopeo copy --insecure-policy --dest-tls-verify=false \
+      docker-archive:"$(readlink -f result)" \
+      docker://"{{image}}:{{tag}}"
+
+# Apply manifests + roll the Deployment so k3s pulls the new image.
+deploy: push
+    #!/usr/bin/env bash
+    set -euo pipefail
+    kubectl apply -f manifests/
+    kubectl -n {{ns}} rollout restart deployment/{{dep}}
+    kubectl -n {{ns}} rollout status deployment/{{dep}} --timeout=120s || {
+      echo "FAIL rollout - pod status + last crash log:"
+      kubectl -n {{ns}} get pods
+      kubectl -n {{ns}} logs deployment/{{dep}} --previous --tail=40
+      exit 1
+    }
+
+# Local dev server (HMR) → http://localhost:5173.
+serve:
+    cd app && npm run dev
+
+logs:
+    kubectl -n {{ns}} logs deploy/{{dep}} -f
+
+# Forward the cluster's :80 → local :8080.
+forward:
+    kubectl -n {{ns}} port-forward svc/{{dep}} 8080:80
+
+# Pre-flight: k3s up, local registry reachable, git index clean (nix evaluates
+# the git INDEX, not the worktree, so unstaged edits to flake.nix/app are blind).
+doctor:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    ok=1
+    systemctl is-active --quiet k3s && echo "  k3s        up" || { echo "  k3s        DOWN -> sudo systemctl start k3s"; ok=0; }
+    curl -sf --max-time 3 http://localhost:5000/v2/ >/dev/null && echo "  registry   localhost:5000 reachable" || { echo "  registry   UNREACHABLE -> start k3s / the registry"; ok=0; }
+    if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      n=$(git status --porcelain . 2>/dev/null | wc -l)
+      [ "$n" = 0 ] && echo "  git        clean" || echo "  git        WARN - $n unstaged/untracked here (nix uses the git INDEX: stage with git add or nix build ignores them)"
+    else
+      echo "  git        (not a worktree - skip)"
+    fi
+    [ "$ok" = 1 ] && echo "doctor: ready" || { echo "doctor: NOT ready"; exit 1; }
+
+# Local smoke: load the built image into docker, run it, curl /, expect 200.
+test: build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v docker >/dev/null || { echo "test needs docker (virtualization.nix)"; exit 1; }
+    img=$(docker load < "$(readlink -f result)" | sed -n 's/Loaded image: \(.*\)/\1/p')
+    echo "loaded $img"
+    docker rm -f {{dep}}-test >/dev/null 2>&1 || true
+    docker run -d --name {{dep}}-test --tmpfs /tmp:mode=1777,uid=1000,gid=1000 -p 18080:{{port}} "$img" >/dev/null
+    sleep 2
+    if curl -sf --max-time 5 http://localhost:18080/ >/dev/null; then
+      echo "  HTTP 200 from /  OK"
+    else
+      echo "  FAIL no 200 - container logs:"; docker logs {{dep}}-test 2>&1 | tail -25; docker rm -f {{dep}}-test >/dev/null; exit 1
+    fi
+    docker rm -f {{dep}}-test >/dev/null
+    echo "test: ok"
+
+# Type-check + lint (needs `npm install` in app/ first — `vite build` also type-checks).
+check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd app
+    [ -d node_modules ] || { echo "run \`npm install\` first"; exit 1; }
+    npx tsc --noEmit
+    npx eslint src 2>/dev/null || echo "  eslint: advisory (configure .eslintrc as needed)"
+
+# After changing deps + `npm install` in app/, recompute npmDepsHash and write
+# it into flake.nix (buildNpmPackage needs the hash to match package-lock.json).
+relock:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -f app/package-lock.json ] || { echo "generate the lockfile first: (cd app && npm install)"; exit 1; }
+    hash=$(nix run nixpkgs#prefetch-npm-deps -- app/package-lock.json)
+    echo "computed npmDepsHash: $hash"
+    sed -i -E "s|npmDepsHash = .*|npmDepsHash = \"$hash\";  # from app/package-lock.json via just relock|" flake.nix
+    echo "updated flake.nix — rebuild with: just build"
+
+# ── Cloudflare Pages (public URL) ───────────────────────────────────────────
+# Builds the static app with Nix (packages.site) and uploads it directly —
+# no Dockerfile, no Git-integration build, the same bytes you'd ship to k3s.
+# SPA routes are handled by app/public/_redirects (Cloudflare serves index.html
+# for every path) — the same role the nginx `try_files … /index.html` fallback
+# plays in the k3s image.
+
+# One-time setup (wrangler login + project create) is in the header above.
+# Deploy to PRODUCTION — creates the <project>.pages.dev URL, incremental on re-run.
+cf:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v wrangler >/dev/null 2>&1 || { echo "cf needs wrangler — run from the devShell (direnv allow)"; exit 1; }
+    nix build .#site --out-link site-out
+    echo "→ uploading ./site-out to Cloudflare Pages project '{{cf_project}}' (production)"
+    wrangler pages deploy ./site-out --project-name {{cf_project}} --branch main
+
+# Override the branch:  CF_BRANCH=feat-x just cf-preview
+# Deploy a PREVIEW build (a branch-specific preview URL, not production).
+cf-preview:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v wrangler >/dev/null 2>&1 || { echo "cf-preview needs wrangler — run from the devShell (direnv allow)"; exit 1; }
+    nix build .#site --out-link site-out
+    branch="${CF_BRANCH:-preview}"
+    echo "→ uploading ./site-out to Cloudflare Pages project '{{cf_project}}' (preview branch: $branch)"
+    wrangler pages deploy ./site-out --project-name {{cf_project}} --branch "$branch"
+
+shell:
+    nix develop

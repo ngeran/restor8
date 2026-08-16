@@ -15,8 +15,11 @@ restor8 — home-lab Juniper automation (configure / backup / restore / protocol
 ├── justfile                # every recipe takes a service arg (default: connector)
 ├── libs/restor8_core/      # real package (hatchling) — the ONLY place junos-pyEZ lives
 ├── services/<name>/        # virtual uv members: pyproject + app/ (code only, no flake)
+├── frontend/               # React+Tailwind v4, OWN flake/justfile (cd frontend && just deploy)
 └── manifests/<name>/       # per-service Deployment+Service, ns restor8, port 8080
 ```
+
+Frontend specifics: same-origin via Ingress (`restor8.home/` → SPA, `/api`+`/ws` → gateway — no CORS); dev parity via the vite proxy (`npm run dev` + gateway port-forward on 18086); after dep changes `cd frontend && just relock` (npmDepsHash).
 
 Add a service: `services/<name>/pyproject.toml` (virtual member, `restor8-core = { workspace = true }`) → add to `serviceApps` in flake.nix → `manifests/<name>/` → `uv lock` → `git add -A` → `just deploy <name>`.
 

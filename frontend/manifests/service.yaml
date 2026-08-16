@@ -1,0 +1,14 @@
+# Service fronting the react-app Deployment.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restor8-frontend
+  namespace: restor8
+spec:
+  selector:
+    app: restor8-frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http      # named → the container's `http` port (8080, non-root)
