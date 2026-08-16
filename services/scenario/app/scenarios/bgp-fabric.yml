@@ -1,0 +1,19 @@
+# bgp-fabric — eBGP on every physical link of the mpls-core fabric.
+#
+# The adjacency graph is the topology plan's 17 links: each node peers
+# with its directly-connected neighbours over the link /30s (addresses
+# applied by `topology.apply`). Expected peer count per node = its link
+# count (P: 5, PE/RR: 3, CE: 1) — the convergence gate uses the per-node
+# number, not a global one.
+name: bgp-fabric
+description: eBGP adjacency over every clabernetes link of the mpls-core fabric
+
+template: templates/bgp-fabric.j2
+jsnapy_test: jsnapy_tests/bgp/bgp.yml
+
+convergence_timeout: 150
+poll_interval: 5
+node_roles: [P, PE, RR, CE]
+
+vars:
+  group: FABRIC

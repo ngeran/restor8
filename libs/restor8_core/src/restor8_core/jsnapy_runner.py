@@ -126,11 +126,16 @@ def compare(testdef: dict[str, object], pre_xml: str, post_xml: str) -> Comparis
         )
     )
 
+    # cRPD puts newlines inside XML tags; jsnapy's is-equal compares
+    # raw text nodes, so normalise before writing the snapshot files.
+    pre_clean = _strip_tag_whitespace(pre_xml)
+    post_clean = _strip_tag_whitespace(post_xml)
+
     tmp = Path(tempfile.mkdtemp(prefix="restor8_jsnapy_"))
     pre_path = tmp / "pre.xml"
     post_path = tmp / "post.xml"
-    pre_path.write_text(pre_xml)
-    post_path.write_text(post_xml)
+    pre_path.write_text(pre_clean)
+    post_path.write_text(post_clean)
 
     try:
         raw = SnapAdmin().check(str(main_cfg), pre_file=str(pre_path), post_file=str(post_path))
@@ -151,3 +156,17 @@ def compare(testdef: dict[str, object], pre_xml: str, post_xml: str) -> Comparis
             {"test": test_names[i] if i < len(test_names) else f"test_{i}", "result": str(result)}
         )
     return ComparisonResult(passed=all(e["result"] == "Passed" for e in entries), results=entries)
+
+def _strip_tag_whitespace(xml: str) -> str:
+    """Trim text-node whitespace via an ElementTree round-trip.
+
+    Args:
+        xml: a snapshot XML string.
+
+    Returns:
+        The same XML with every text node `.strip()`-ed (attributes and
+        structure preserved).
+    """
+    import re as _re
+
+    return _re.sub(r">(\s*)([^<>]*?)(\s*)<", lambda m: ">" + m.group(2).strip() + "<", xml)

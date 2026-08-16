@@ -302,7 +302,17 @@ class JunosConnection:
                     Stage.LOADING_CONFIG,
                     f"loading {len(payload)}B of {fmt} config ({mode})",
                 )
-                cu.load(payload, format=fmt, mode=mode)
+                # "statement not found" = deleting an absent statement —
+                # the definition of an idempotent delete (e.g. re-applying
+                # a plan to a freshly-restarted node). PyEZ escalates
+                # warning-severity replies to ConfigLoadError unless told
+                # which warnings are expected.
+                cu.load(
+                    payload,
+                    format=fmt,
+                    mode=mode,
+                    ignore_warning=["statement not found"],
+                )
 
             diff = ""
             with self._guard(Stage.DIFF_READY):

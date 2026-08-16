@@ -63,17 +63,29 @@ def _inventory_devices() -> list[dict[str, Any]]:
     return r.json()
 
 
-def _node_payload(node: dict[str, Any]) -> str:
-    """Render one node's baseline config (SET format, merge-load).
+def _node_payload(node: dict[str, Any], links: list[dict[str, Any]]) -> str:
+    """Render one node's underlay config (SET format, merge-load).
 
     SET format on purpose: ``delete <path>`` lines are only valid in
     set-format loads (text-format rejects them with a syntax error), and
     set lines have no brace-balancing hazard at all. Cleanup deletes
     come first so stale entries vanish before the plan's values land.
+
+    The underlay is: this node's side of every link (interface + /30),
+    its loopback, and its ASN — exactly what the hive lab's README says
+    automation must provide (the cRPDs ship identity-only configs).
     """
     lines: list[str] = [f"delete {c}" for c in node.get("cleanup") or []]
-    lb = str(node["loopback"])
-    lines.append(f"set interfaces lo0 unit 0 family inet address {lb}/32")
+    for link in links:
+        if link["a"] == node["name"]:
+            lines.append(
+                f"set interfaces {link['a_if']} unit 0 family inet address {link['a_ip']}"
+            )
+        elif link["b"] == node["name"]:
+            lines.append(
+                f"set interfaces {link['b_if']} unit 0 family inet address {link['b_ip']}"
+            )
+    lines.append(f"set interfaces lo0 unit 0 family inet address {node['loopback']}/32")
     lines.append(f"set routing-options autonomous-system {node['asn']}")
     return "\n".join(lines)
 
@@ -156,7 +168,7 @@ def apply() -> ApplyResult:
                 ApplyNodeResult(node=name, ok=False, error="not in inventory — run /topology/reconcile")
             )
             continue
-        payload = _node_payload(node)
+        payload = _node_payload(node, list(topo.get("links", [])))
         try:
             r = httpx.post(
                 f"{CONNECTOR_URL}/push",

@@ -129,18 +129,22 @@ early, prove it often.
       Jinja2 render → connector push (set-format, confirmed commit) →
       convergence polling (established/total per node) → JSNAPy pre/post
       compare → result stored.
-- [ ] **Checkpoint: BLOCKED on lab connectivity** — engine proven through
-      four runs (all phases execute, real bugs fixed: SQLite NOT NULL,
-      XML whitespace-tolerant parsing, P-1 containerlab_node case, RBAC
-      discovery). Physical finding: each cRPD sits behind its launcher's
-      PRIVATE bridge (every eth0 = 172.20.20.2, pod-local); per-node
-      Services expose 22/830/… but NOT 179 — no cluster path for BGP
-      between nodes. bgp-full-mesh will pass the moment real links exist:
-      needs the clabernetes topology to define node-to-node LINKS (the
-      unwired `-vx` VXLAN services are that mechanism's endpoints).
-      Decision needed from Nikos: where the clabernetes topology/link
-      config lives (or wire VXLAN manually) — then update
-      mpls-core.yml `underlay` + peer discovery to real interface IPs.
+- [x] **Checkpoint PASSED 2026-08-16 (run 8)** — the missing piece was the
+      HOST MPLS KERNEL MODULES (hive's own README warned: without them
+      cRPD's eth1+ never register; `/proc/sys/net/mpls` was empty).
+      After `sudo modprobe mpls_router mpls_iptunnel` + launcher restarts,
+      the 17 clabernetes links came alive. restor8's plan was rewritten to
+      the REAL fabric (hive `04-routing/manifests/02-topology.yaml`),
+      underlay applied via the app (per-link /30s + loopbacks + ASNs),
+      and `bgp-fabric` went green: converged (P 5/5, PE/RR 3/3, CE 1/1),
+      JSNAPy passed ×10, independently verified on devices (p2: 5 peers,
+      0 down, 122 prefixes; P-1 root password now manolis1, durably in
+      hive's p1.conf). Lessons burned in: cRPD terse bgp-summary has NO
+      per-peer state element — use header peer-count/down-peer-count;
+      newlines live INSIDE cRPD's XML tags everywhere; jsnapy writes to
+      ~/.jsnapy → HOME=/tmp in the deployment; launcher restarts reset
+      nodes to ConfigMap startup-config (config must be re-appliable —
+      it is, idempotently).
 
 ## Phase 6 — Real-time feedback (gateway)
 - [ ] Scaffold `services/gateway`: WS fan-out of connector progress events +

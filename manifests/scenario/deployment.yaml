@@ -34,6 +34,10 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            # jsnapy's internals write to ~/.jsnapy — HOME must be writable
+            # (image HOME=/app is on the read-only rootfs).
+            - name: HOME
+              value: /tmp
             - name: INVENTORY_URL
               value: http://restor8-inventory:8080
             - name: CONNECTOR_URL

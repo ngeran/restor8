@@ -11,9 +11,9 @@ Definitions are CODE (YAML + Jinja2 + JSNAPy testfiles in this repo,
 baked into the image); outcomes are DATA (SQLite on a PVC).
 
 Choreography (scenario touches no devices):
-    topology   GET /topology            roles, ASNs, node list
+    topology   GET /topology            roles, ASNs, links (the adjacency mesh)
     inventory  GET /devices             addresses, auth_refs
-    connector  POST /snapshot           eth0 pod-IP discovery, bgp summary
+    connector  POST /snapshot           bgp summary (pre/post + polling)
     connector  POST /push               rendered config (set-format)
     core       jsnapy_runner.compare    convergence validation
 """
@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
@@ -94,61 +95,24 @@ def _snapshot(dev: dict[str, Any], rpc: str, args: dict[str, str] | None = None)
     return r.json()["xml"]
 
 
-# ── peer-address discovery ─────────────────────────────────────────────
-#
-# The flat-underlay reality (learned the hard way, run 2): each
-# clabernetes launcher pod runs its OWN private bridge — every cRPD's
-# eth0 is 172.20.20.2, pod-local, NOT cluster-routable. The cluster
-# address of a node is its LAUNCHER POD IP (10.42.x.y), which is what
-# the per-node Services actually select — and what a BGP session's
-# source address becomes (the launcher bridge masquerades outgoing
-# traffic to the pod IP). So the mesh peers on launcher pod IPs,
-# discovered live from the k8s API (they move if a launcher restarts).
-
-_SA = Path("/var/run/secrets/kubernetes.io/serviceaccount")
-
-
-def _launcher_pod_ip(node_service: str) -> str:
-    """Pod IP of a node's clabernetes launcher, from the k8s API.
-
-    Args:
-        node_service: the inventory containerlab_node name (p1, p2, …) —
-            launcher pods are named `<node>-<hash>` in ns `topology`.
-
-    Returns:
-        The launcher pod's IP (10.42.x.y).
-
-    Raises:
-        RuntimeError: API failure or no matching pod.
-    """
-    token = (_SA / "token").read_text() if (_SA / "token").exists() else ""
-    try:
-        r = httpx.get(
-            "https://kubernetes.default.svc/api/v1/namespaces/topology/pods",
-            headers={"Authorization": f"Bearer {token}"} if token else {},
-            verify=str(_SA / "ca.crt") if (_SA / "ca.crt").exists() else False,
-            timeout=15,
-        )
-    except httpx.HTTPError as exc:
-        raise RuntimeError(f"k8s API unreachable: {exc}") from exc
-    if r.status_code != 200:
-        raise RuntimeError(f"k8s API {r.status_code}: {r.text[:200]}")
-    for pod in r.json().get("items", []):
-        name = pod["metadata"]["name"]
-        # Case-insensitive: inventory names (P-1) vs pod prefixes (p1-…)
-        if name.split("-")[0].lower() == node_service.lower() and pod.get("status", {}).get("podIP"):
-            return str(pod["status"]["podIP"])
-    raise RuntimeError(f"no launcher pod found for '{node_service}' in ns topology")
-
-
 # ── convergence polling ────────────────────────────────────────────────
 
 
 def _bgp_state(xml: str) -> tuple[int, int]:
-    """(established, total) peer counts from a bgp-summary snapshot."""
-    total = xml.count("<bgp-peer")
-    established = xml.count("<peer-state>Established</peer-state>")
-    return established, total
+    """(established, total) peer counts from a bgp-summary snapshot.
+
+    cRPD's terse summary has NO per-peer peer-state element — but the
+    bgp-information header carries the answer directly (peer-count,
+    down-peer-count). Whitespace-tolerant throughout: cRPD puts newlines
+    inside its XML tags.
+    """
+    def _num(tag: str) -> int:
+        m = re.search(rf"<{tag}>\s*(\d+)\s*</{tag}>", xml)
+        return int(m.group(1)) if m else 0
+
+    total = _num("peer-count")
+    down = _num("down-peer-count")
+    return max(0, total - down), total
 
 
 # ── the run state machine ──────────────────────────────────────────────
@@ -177,18 +141,26 @@ def _execute(run_id: int, definition: dict[str, Any]) -> None:
             missing=sorted(n["name"] for n in planned if n["name"] not in devices),
         )
 
-        # 1. discover peering addresses (launcher pod IPs, see discovery note)
+        # 1. build the adjacency mesh from the plan's links (underlay
+        #    addressing is applied by topology.apply; peers = the other
+        #    side's /30 address on each link)
+        asns = {n["name"]: n["asn"] for n in plan["nodes"]}
+        peers_of: dict[str, list[dict[str, str]]] = {}
+        for link in plan.get("links", []):
+            a, b = link["a"], link["b"]
+            peers_of.setdefault(a, []).append(
+                {"ip": str(link["b_ip"]).split("/")[0], "asn": str(asns[b])}
+            )
+            peers_of.setdefault(b, []).append(
+                {"ip": str(link["a_ip"]).split("/")[0], "asn": str(asns[a])}
+            )
         mesh: dict[str, dict[str, Any]] = {}
         for n in planned:
             dev = devices.get(n["name"])
             if dev is None:
                 raise RuntimeError(f"{n['name']} not in inventory")
-            mesh[n["name"]] = {
-                "dev": dev,
-                "asn": n["asn"],
-                "ip": _launcher_pod_ip(str(dev.get("containerlab_node") or n["name"])),
-            }
-        phase("discovered", peers={k: v["ip"] for k, v in mesh.items()})
+            mesh[n["name"]] = {"dev": dev, "asn": n["asn"], "peers": peers_of.get(n["name"], [])}
+        phase("mesh", links=len(plan.get("links", [])), peers={k: len(v["peers"]) for k, v in mesh.items()})
 
         # 2. pre-change snapshot (spec §4: pre AND post for every run)
         pres = {
@@ -200,12 +172,7 @@ def _execute(run_id: int, definition: dict[str, Any]) -> None:
         # 3. render + push per node
         template = _ENV.get_template(str(definition["template"]).split("/")[-1])
         for name, m in mesh.items():
-            peers = [
-                {"ip": other["ip"], "asn": other["asn"]}
-                for oname, other in mesh.items()
-                if oname != name
-            ]
-            payload = template.render(peers=peers, **definition.get("vars", {}))
+            payload = template.render(peers=m["peers"], **definition.get("vars", {}))
             r = httpx.post(
                 f"{CONNECTOR_URL}/push",
                 json={
@@ -231,7 +198,7 @@ def _execute(run_id: int, definition: dict[str, Any]) -> None:
         # 4. poll convergence
         timeout = int(definition.get("convergence_timeout", 120))
         interval = int(definition.get("poll_interval", 5))
-        min_peers = int(definition.get("min_peers", len(mesh) - 1))
+        expected = {name: len(m["peers"]) for name, m in mesh.items()}
         converged = False
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -240,11 +207,17 @@ def _execute(run_id: int, definition: dict[str, Any]) -> None:
                 for name, m in mesh.items()
             }
             detail["nodes"] = {
-                name: {**detail["nodes"][name], "established": e, "peers": t}
+                name: {
+                    **detail["nodes"][name],
+                    "established": e,
+                    "peers": t,
+                    "expected": expected[name],
+                }
                 for name, (e, t) in states.items()
             }
             if all(
-                e >= min_peers and t >= min_peers for e, t in states.values()
+                e >= expected[name] and t >= expected[name]
+                for name, (e, t) in states.items()
             ):
                 converged = True
                 break

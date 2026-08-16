@@ -1,14 +1,15 @@
 # JSNAPy testfile — BGP family (spec §4: one YAML per protocol family,
 # under services/scenario/jsnapy_tests/<protocol>/).
 #
-# All learned peers must be Established. The scenario engine additionally
-# enforces min_peers separately — JSNAPy alone would vacuously pass an
-# empty peer table.
-bgp_neighbors_established:
+# cRPD's terse bgp summary has no per-peer state element; the header's
+# down-peer-count is the authoritative "everything up" signal. The
+# scenario engine separately enforces per-node expected peer counts
+# (from the topology plan) — this test asserts none are down.
+bgp_all_peers_up:
   - rpc: get-bgp-summary-information
   - iterate:
-      xpath: //bgp-peer
+      xpath: //bgp-information
       tests:
-        - is-equal: peer-state, Established
-  - info: "all bgp peers established"
-  - err: "bgp peer(s) not established"
+        - is-equal: down-peer-count, 0
+  - info: "no bgp peers down"
+  - err: "bgp peers down"

@@ -1,57 +1,50 @@
-# restor8 topology plan — the MPLS core lab, as code.
+# restor8 topology plan — mirrors the REAL fabric in
+# hive/04-routing/manifests/02-topology.yaml (Topology CR `mpls-core`):
+# 10 cRPDs under clabernetes, 17 point-to-point links, ethN per link
+# order (interface map in hive's 01-crpd-configs.yaml). restor8's job,
+# per that repo's own README: push ALL routing config via automation.
 #
-# This file IS the lab's intended shape: nodes (roles, ASNs, loopbacks),
-# links, and per-node cleanup of stale config. `just deploy topology`
-# bakes it into the image; POST /topology/apply pushes each node's
-# baseline through connector (merge-load: cleanup delete-lines first,
-# then additions).
-#
-# underlay: flat-podnet — the physical fabric doesn't exist yet (clabernetes
-# pods, no wired links; the -vx services are unwired VXLAN endpoints).
-# Peerings therefore ride eth0/pod-network IPs (unicast-only: BGP yes,
-# multicast-dependent OSPF/ISIS/LDP no) until real links land. The plan's
-# links section below records the INTENDED fabric for that day.
+# Addressing plan: one /30 per link (10.10.<4*i>.0/30, .1 = side a,
+# .2 = side b), loopbacks 10.255.0.x/32, per-node eBGP ASN.
+# `topology.apply` renders the underlay (interfaces + lo0 + AS);
+# scenarios (Phase 5) render protocols on top.
 name: mpls-core
-underlay: flat-podnet
+underlay: clabernetes-links
 
-# Node ASNs: unique per node (eBGP mesh over the flat underlay). When the
-# real fabric lands, roles drive the classic design (AS 65000 iBGP +
-# route-reflection via rr1/rr2, CE ASs separate) — the scenario engine
-# (Phase 5) renders peerings from this file either way.
 nodes:
-  - { name: P-1, role: P,  asn: 65001, loopback: 10.255.0.1 }
-  - { name: p2,  role: P,  asn: 65002, loopback: 10.255.0.2,
-      cleanup: [interfaces lo0 unit 0 family inet address 2.2.2.2/32,
-                interfaces eth1, protocols bgp] }
-  - { name: p3,  role: P,  asn: 65003, loopback: 10.255.0.3,
-      cleanup: [interfaces lo0 unit 0 family inet address 3.3.3.3/32,
-                interfaces eth1, protocols bgp] }
-  - { name: p4,  role: P,  asn: 65004, loopback: 10.255.0.4 }
-  - { name: pe1, role: PE, asn: 65011, loopback: 10.255.0.11 }
-  - { name: pe2, role: PE, asn: 65012, loopback: 10.255.0.12 }
-  - { name: rr1, role: RR, asn: 65021, loopback: 10.255.0.21 }
-  - { name: rr2, role: RR, asn: 65022, loopback: 10.255.0.22 }
-  - { name: ce1, role: CE, asn: 65101, loopback: 10.255.1.1 }
-  - { name: ce2, role: CE, asn: 65102, loopback: 10.255.1.2 }
+  - { name: P-1, role: P,  asn: 65001, loopback: 10.255.0.1,  cleanup: [protocols bgp] }
+  - { name: p2,  role: P,  asn: 65002, loopback: 10.255.0.2,  cleanup: [protocols bgp] }
+  - { name: p3,  role: P,  asn: 65003, loopback: 10.255.0.3,  cleanup: [protocols bgp] }
+  - { name: p4,  role: P,  asn: 65004, loopback: 10.255.0.4,  cleanup: [protocols bgp] }
+  - { name: pe1, role: PE, asn: 65011, loopback: 10.255.0.11, cleanup: [protocols bgp] }
+  - { name: pe2, role: PE, asn: 65012, loopback: 10.255.0.12, cleanup: [protocols bgp] }
+  - { name: rr1, role: RR, asn: 65021, loopback: 10.255.0.21, cleanup: [protocols bgp] }
+  - { name: rr2, role: RR, asn: 65022, loopback: 10.255.0.22, cleanup: [protocols bgp] }
+  - { name: ce1, role: CE, asn: 65101, loopback: 10.255.1.1,  cleanup: [protocols bgp] }
+  - { name: ce2, role: CE, asn: 65102, loopback: 10.255.1.2,  cleanup: [protocols bgp] }
+  # cleanup removes the stale MESH group from the flat-underlay scenario
+  # experiments (runs 2-4) so summary counts stay honest.
 
-# cleanup (above) removes config staged by hand during Phase 2/3 recon
-# (lo0 2.2.2.2/3.3.3.3, the 10.99.23.0/30 eth1 test link, the dead ebgp
-# group) so every node's baseline comes from THIS file alone.
-
-# INTENDED physical fabric (informational until underlay != flat-podnet;
-# Phase 5 renders peerings over whatever underlay is active):
+# The real 17-link fabric (names = inventory names; P-1 is the p1 node):
 links:
-  - { a: P-1, b: p2,  a_ip: 10.0.12.1, b_ip: 10.0.12.2, prefix: 30 }
-  - { a: P-1, b: p3,  a_ip: 10.0.13.1, b_ip: 10.0.13.2, prefix: 30 }
-  - { a: P-1, b: p4,  a_ip: 10.0.14.1, b_ip: 10.0.14.2, prefix: 30 }
-  - { a: p2,  b: p3,  a_ip: 10.0.23.1, b_ip: 10.0.23.2, prefix: 30 }
-  - { a: p2,  b: p4,  a_ip: 10.0.24.1, b_ip: 10.0.24.2, prefix: 30 }
-  - { a: p3,  b: p4,  a_ip: 10.0.34.1, b_ip: 10.0.34.2, prefix: 30 }
-  - { a: pe1, b: P-1, a_ip: 10.1.11.1, b_ip: 10.1.11.2, prefix: 30 }
-  - { a: pe1, b: p2,  a_ip: 10.1.12.1, b_ip: 10.1.12.2, prefix: 30 }
-  - { a: pe2, b: p3,  a_ip: 10.1.13.1, b_ip: 10.1.13.2, prefix: 30 }
-  - { a: pe2, b: p4,  a_ip: 10.1.14.1, b_ip: 10.1.14.2, prefix: 30 }
-  - { a: rr1, b: P-1, a_ip: 10.2.11.1, b_ip: 10.2.11.2, prefix: 30 }
-  - { a: rr2, b: p2,  a_ip: 10.2.12.1, b_ip: 10.2.12.2, prefix: 30 }
-  - { a: ce1, b: pe1, a_ip: 10.3.11.1, b_ip: 10.3.11.2, prefix: 30 }
-  - { a: ce2, b: pe2, a_ip: 10.3.12.1, b_ip: 10.3.12.2, prefix: 30 }
+  # --- P-core full mesh (6) ---
+  - { a: P-1, a_if: eth1, a_ip: 10.10.0.1/30,  b: p2, b_if: eth1, b_ip: 10.10.0.2/30 }
+  - { a: P-1, a_if: eth2, a_ip: 10.10.4.1/30,  b: p3, b_if: eth1, b_ip: 10.10.4.2/30 }
+  - { a: P-1, a_if: eth3, a_ip: 10.10.8.1/30,  b: p4, b_if: eth1, b_ip: 10.10.8.2/30 }
+  - { a: p2,  a_if: eth2, a_ip: 10.10.12.1/30, b: p3, b_if: eth2, b_ip: 10.10.12.2/30 }
+  - { a: p2,  a_if: eth3, a_ip: 10.10.16.1/30, b: p4, b_if: eth2, b_ip: 10.10.16.2/30 }
+  - { a: p3,  a_if: eth3, a_ip: 10.10.20.1/30, b: p4, b_if: eth3, b_ip: 10.10.20.2/30 }
+  # --- PE dual-homing into the core (4) ---
+  - { a: pe1, a_if: eth1, a_ip: 10.10.24.1/30, b: P-1, b_if: eth4, b_ip: 10.10.24.2/30 }
+  - { a: pe1, a_if: eth2, a_ip: 10.10.28.1/30, b: p2,  b_if: eth4, b_ip: 10.10.28.2/30 }
+  - { a: pe2, a_if: eth1, a_ip: 10.10.32.1/30, b: p3,  b_if: eth4, b_ip: 10.10.32.2/30 }
+  - { a: pe2, a_if: eth2, a_ip: 10.10.36.1/30, b: p4,  b_if: eth4, b_ip: 10.10.36.2/30 }
+  # --- Route reflectors, dual-homed + interconnect (5) ---
+  - { a: rr1, a_if: eth1, a_ip: 10.10.40.1/30, b: P-1, b_if: eth5, b_ip: 10.10.40.2/30 }
+  - { a: rr1, a_if: eth2, a_ip: 10.10.44.1/30, b: p2,  b_if: eth5, b_ip: 10.10.44.2/30 }
+  - { a: rr2, a_if: eth1, a_ip: 10.10.48.1/30, b: p3,  b_if: eth5, b_ip: 10.10.48.2/30 }
+  - { a: rr2, a_if: eth2, a_ip: 10.10.52.1/30, b: p4,  b_if: eth5, b_ip: 10.10.52.2/30 }
+  - { a: rr1, a_if: eth3, a_ip: 10.10.56.1/30, b: rr2, b_if: eth3, b_ip: 10.10.56.2/30 }
+  # --- Customer edges (2) ---
+  - { a: ce1, a_if: eth1, a_ip: 10.10.60.1/30, b: pe1, b_if: eth3, b_ip: 10.10.60.2/30 }
+  - { a: ce2, a_if: eth1, a_ip: 10.10.64.1/30, b: pe2, b_if: eth3, b_ip: 10.10.64.2/30 }

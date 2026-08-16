@@ -1,4 +1,4 @@
-{# Per-node mesh config (set-format; idempotent set lines). #}
+{# Per-node eBGP config (set-format; idempotent set lines). #}
 set policy-options policy-statement EXPORT-DIRECT term 1 from protocol direct
 set policy-options policy-statement EXPORT-DIRECT term 1 then accept
 set protocols bgp group {{ group }} type external
