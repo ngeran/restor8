@@ -12,6 +12,7 @@ version = "0.1.0"
 description = "Shared core for restor8: typed PyEZ wrapper, progress events, models"
 requires-python = ">=3.11"
 dependencies = [
+    "httpx",             # gateway event relay (best-effort, worker thread)
     "junos-eznc>=2.6",   # PyEZ — PyPI dist name; imports as jnpr.junos
     "jsnapy>=1.3",       # validation engine (file-based pre/post checks)
     "pydantic>=2",

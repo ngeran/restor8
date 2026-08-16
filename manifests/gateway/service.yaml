@@ -1,0 +1,16 @@
+# ClusterIP for restor8-gateway — the frontend's only backend (REST + WS).
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restor8-gateway
+  namespace: restor8
+  labels:
+    app: restor8-gateway
+spec:
+  selector:
+    app: restor8-gateway
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

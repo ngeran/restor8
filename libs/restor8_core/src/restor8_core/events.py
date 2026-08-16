@@ -14,8 +14,11 @@ consumers cannot drift.
 from __future__ import annotations
 
 import enum
+import logging
+import os
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -123,3 +126,53 @@ class EventEmitter:
         except Exception:
             # Deliberately swallowed — see class docstring.
             pass
+
+
+# ── gateway relay ──────────────────────────────────────────────────────
+#
+# Services that want their events in the browser feed set GATEWAY_URL;
+# `relay_sink` wraps their local logging sink with a fire-and-forget POST
+# to the gateway's /internal/events. Delivery is best-effort BY DESIGN:
+# a down gateway must never delay a device operation (same rule as the
+# EventEmitter's swallow-all).
+
+_RELAY_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="relay")
+_RELAY_LOG = logging.getLogger("restor8.relay")
+
+
+def relay_sink(local: OnEvent) -> OnEvent:
+    """Wrap a local sink with best-effort forwarding to the gateway.
+
+    Args:
+        local: the service's own sink (JSON log line, typically).
+
+    Returns:
+        A sink that calls ``local`` synchronously and POSTs the event to
+        ``$GATEWAY_URL/internal/events`` on a worker thread when the env
+        var is set.
+    """
+
+    gateway = os.environ.get("GATEWAY_URL", "").rstrip("/")
+
+    def _sink(event: DeviceEvent) -> None:
+        local(event)
+        if not gateway:
+            return
+
+        def _post() -> None:
+            # Imported lazily: not every service's venv carries httpx, and
+            # this module (events) is imported by all of them.
+            import httpx
+
+            try:
+                httpx.post(
+                    f"{gateway}/internal/events",
+                    json=event.model_dump(mode="json"),
+                    timeout=5,
+                )
+            except Exception:  # noqa: BLE001 — relay is best-effort
+                _RELAY_LOG.debug("relay failed", exc_info=True)
+
+        _RELAY_POOL.submit(_post)
+
+    return _sink

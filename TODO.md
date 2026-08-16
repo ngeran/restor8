@@ -147,10 +147,20 @@ early, prove it often.
       it is, idempotently).
 
 ## Phase 6 — Real-time feedback (gateway)
-- [ ] Scaffold `services/gateway`: WS fan-out of connector progress events +
-      scenario-run progress, keyed by run/session ID.
-- [ ] **Checkpoint:** raw WS client (`websocat`), trigger a scenario via REST,
-      watch live per-step events arrive before the run completes.
+- [x] Scaffold `services/gateway`: `POST /internal/events` ingest → in-memory
+      bus (bounded queues, drop-oldest — a slow browser never back-pressures
+      a device op) → `WS /ws` fan-out with `?session/&device/&run` filters;
+      REST aggregation (`/api/*`: devices, topology, backups, diff,
+      scenarios, runs + run-start action).
+- [x] Event producers: restor8-core `relay_sink` (log + best-effort POST on
+      a worker thread; gateway down ≠ device op failure) wired into all
+      connector endpoints; scenario relays phase records the same way.
+- [x] **Checkpoint PASSED 2026-08-16** — `websocat -n` (devShell client;
+      note: websocat exits on stdin-EOF in background — `-n` keeps it up)
+      subscribed to `/ws`; triggered `bgp-fabric` via gateway REST; at
+      t+40s with the run still `running`, the subscriber had received
+      3 scenario phases (plan/mesh/pre-snapshot) + 145 device events.
+      Gateway ingested 300+ events across the run.
 
 ## Phase 7 — Frontend
 - [ ] Scaffold `frontend/` (React + Tailwind v4, `nix flake init -t ~/.omni-nix#react`).

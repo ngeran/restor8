@@ -48,6 +48,8 @@ spec:
             - name: http
               containerPort: 8080
           env:
+            - name: GATEWAY_URL
+              value: http://restor8-gateway:8080
             - name: LAB_USER
               valueFrom:
                 secretKeyRef:

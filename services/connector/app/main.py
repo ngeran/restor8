@@ -22,7 +22,7 @@ import time
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from restor8_core.events import DeviceEvent
+from restor8_core.events import DeviceEvent, relay_sink
 from restor8_core.junos import ConfigFormat, ConfigMode, JunosConnection
 from restor8_core.models import Restor8Error
 
@@ -243,7 +243,7 @@ def connect(req: ConnectRequest) -> ConnectResponse:
         auth,
         port=req.port,
         timeout=req.timeout,
-        on_event=_log_event,
+        on_event=relay_sink(_log_event),
     )
     try:
         facts = jc.connect()
@@ -295,7 +295,7 @@ def get_config(req: ConfigRequest) -> ConfigResponse:
         raise HTTPException(status_code=422, detail="no credentials (see /connect)")
     jc = JunosConnection(
         req.host, user, auth, port=req.port, timeout=req.timeout,
-        on_event=_log_event,
+        on_event=relay_sink(_log_event),
     )
     try:
         jc.connect()
@@ -359,7 +359,7 @@ def push_config(req: PushRequest) -> PushResponse:
         raise HTTPException(status_code=422, detail="no credentials (see /connect)")
     jc = JunosConnection(
         req.host, user, auth, port=req.port, timeout=req.timeout,
-        on_event=_log_event,
+        on_event=relay_sink(_log_event),
     )
     held = False
     try:
@@ -523,7 +523,7 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
         raise HTTPException(status_code=422, detail="no credentials (see /connect)")
     jc = JunosConnection(
         req.host, user, auth, port=req.port, timeout=req.timeout,
-        on_event=_log_event,
+        on_event=relay_sink(_log_event),
     )
     try:
         jc.connect()

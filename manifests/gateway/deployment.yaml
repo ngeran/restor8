@@ -1,24 +1,23 @@
-# restor8-scenario Deployment. Run history in SQLite on a PVC; scenario
-# definitions/templates/jsnapy testfiles are baked into the image.
+# restor8-gateway Deployment. Stateless; the event bus is in-memory
+# (a reconnecting browser resubscribes — runs are re-readable via REST).
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: restor8-scenario
+  name: restor8-gateway
   namespace: restor8
   labels:
-    app: restor8-scenario
+    app: restor8-gateway
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: restor8-scenario
+      app: restor8-gateway
   template:
     metadata:
       labels:
-        app: restor8-scenario
+        app: restor8-gateway
     spec:
-      serviceAccountName: restor8-scenario   # read pods in ns topology (rbac.yaml)
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -27,27 +26,25 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - name: restor8-scenario
-          image: localhost:5000/restor8-scenario:latest
+        - name: restor8-gateway
+          image: localhost:5000/restor8-gateway:latest
           imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
           env:
-            # jsnapy's internals write to ~/.jsnapy — HOME must be writable
-            # (image HOME=/app is on the read-only rootfs).
-            - name: HOME
-              value: /tmp
             - name: INVENTORY_URL
               value: http://restor8-inventory:8080
             - name: CONNECTOR_URL
               value: http://restor8-connector:8080
+            - name: BACKUP_URL
+              value: http://restor8-backup:8080
+            - name: RESTORE_URL
+              value: http://restor8-restore:8080
             - name: TOPOLOGY_URL
               value: http://restor8-topology:8080
-            - name: GATEWAY_URL
-              value: http://restor8-gateway:8080
-            - name: SCENARIO_DB
-              value: /data/scenario.db
+            - name: SCENARIO_URL
+              value: http://restor8-scenario:8080
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -73,11 +70,6 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            - name: data
-              mountPath: /data
       volumes:
         - name: tmp
           emptyDir: {}
-        - name: data
-          persistentVolumeClaim:
-            claimName: restor8-scenario

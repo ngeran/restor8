@@ -22,9 +22,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +52,24 @@ _ENV = Environment(
 
 log = logging.getLogger("restor8.scenario")
 logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+# Phase records also go to the gateway (Phase 6 live feed) — best-effort
+# on a worker thread, identical rules to restor8_core's device-event relay.
+GATEWAY_URL = os.environ.get("GATEWAY_URL", "").rstrip("/")
+_RELAY_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="gwrelay")
+
+
+def _relay(record: dict[str, Any]) -> None:
+    if not GATEWAY_URL:
+        return
+
+    def _post() -> None:
+        try:
+            httpx.post(f"{GATEWAY_URL}/internal/events", json=record, timeout=5)
+        except httpx.HTTPError:
+            pass
+
+    _RELAY_POOL.submit(_post)
 
 db = RunDB()
 
@@ -124,8 +144,10 @@ def _execute(run_id: int, definition: dict[str, Any]) -> None:
     status = "failed"
 
     def phase(name: str, **info: Any) -> None:
+        record = {"run": run_id, "scenario": definition["name"], "phase": name, **info}
         detail["phases"].append({"phase": name, **info})
-        log.info(json.dumps({"run": run_id, "phase": name, **info}))
+        log.info(json.dumps(record))
+        _relay(record)
 
     try:
         plan = _get(f"{TOPOLOGY_URL}/topology").json()

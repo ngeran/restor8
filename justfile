@@ -93,17 +93,21 @@ test svc="connector": (build svc)
     echo "test: ok"
 
 # Lint + type-check everything (the image build doesn't lint). ruff is
-# strict. mypy runs per service against that service's own venv so each
-# one sees exactly its dependencies (libs are checked with every service).
+# strict. mypy: the core lib once (connector's venv has the full dep set),
+# then each service's app against its OWN venv — core must not be held
+# hostage to whichever service happens to lack a transitive import.
 check:
     #!/usr/bin/env bash
     set -euo pipefail
     ruff check libs services
+    echo "── mypy [core]"
+    nix develop .#connector -c bash -c \
+      'mypy --python-executable "$(command -v python)" libs/restor8_core/src'
     for d in services/*/app; do
       svc="$(basename "$(dirname "$d")")"
       echo "── mypy [$svc]"
       nix develop .#"$svc" -c bash -c \
-        "mypy --python-executable \"\$(command -v python)\" libs/restor8_core/src $d"
+        "mypy --python-executable \"\$(command -v python)\" $d"
     done
 
 # Drop into the default devShell manually (direnv does this on cd).

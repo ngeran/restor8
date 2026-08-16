@@ -1,0 +1,16 @@
+# gateway — the BFF: REST aggregation + WebSocket fan-out (Phase 6).
+# The browser talks ONLY to this service. Device/protocol progress events
+# arrive via POST /internal/events (pushed by connector + scenario through
+# restor8-core's relay) and fan out to WS subscribers keyed by
+# session/device/run.
+[project]
+name = "restor8-gateway"
+version = "0.1.0"
+description = "Aggregation + live-feedback fan-out for the restor8 UI"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "websockets",
+]
