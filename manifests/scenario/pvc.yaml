@@ -1,0 +1,12 @@
+# Scenario run-history volume.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restor8-scenario
+  namespace: restor8
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 512Mi

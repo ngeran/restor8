@@ -119,14 +119,28 @@ early, prove it often.
       (fresh app-era baseline commits per device).
 
 ## Phase 5 — Scenario engine
-- [ ] Scaffold `services/scenario`: scenario = YAML (protocol, target nodes,
-      Jinja2 template vars, JSNAPy test file, convergence timeout).
-- [ ] ONE scenario end-to-end (`bgp-full-mesh`) before generalizing to
-      ISIS/OSPF/LDP-TE/MPLS/L3VPN/TWAMP.
-- [ ] Run flow: render templates → connector push (confirmed commit) →
-      poll convergence → JSNAPy check → store result.
-- [ ] **Checkpoint:** run `bgp-full-mesh` via curl start-to-finish; pass/fail
-      matches reality (verify with `show bgp summary` on devices).
+- [x] Scaffold `services/scenario`: scenario = YAML + Jinja2 template +
+      JSNAPy testfile, checked into the image; run history in SQLite on a
+      PVC. Background-thread runs; `POST /scenario/{name}/run` → poll
+      `GET /scenario/run/{id}`.
+- [x] ONE scenario end-to-end (`bgp-full-mesh`) before generalizing.
+- [x] Run flow: topology plan + inventory lookup → peer-address discovery
+      (k8s API, RBAC'd SA reading launcher pod IPs in ns topology) →
+      Jinja2 render → connector push (set-format, confirmed commit) →
+      convergence polling (established/total per node) → JSNAPy pre/post
+      compare → result stored.
+- [ ] **Checkpoint: BLOCKED on lab connectivity** — engine proven through
+      four runs (all phases execute, real bugs fixed: SQLite NOT NULL,
+      XML whitespace-tolerant parsing, P-1 containerlab_node case, RBAC
+      discovery). Physical finding: each cRPD sits behind its launcher's
+      PRIVATE bridge (every eth0 = 172.20.20.2, pod-local); per-node
+      Services expose 22/830/… but NOT 179 — no cluster path for BGP
+      between nodes. bgp-full-mesh will pass the moment real links exist:
+      needs the clabernetes topology to define node-to-node LINKS (the
+      unwired `-vx` VXLAN services are that mechanism's endpoints).
+      Decision needed from Nikos: where the clabernetes topology/link
+      config lives (or wire VXLAN manually) — then update
+      mpls-core.yml `underlay` + peer discovery to real interface IPs.
 
 ## Phase 6 — Real-time feedback (gateway)
 - [ ] Scaffold `services/gateway`: WS fan-out of connector progress events +

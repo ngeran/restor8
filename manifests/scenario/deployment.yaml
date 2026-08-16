@@ -1,0 +1,77 @@
+# restor8-scenario Deployment. Run history in SQLite on a PVC; scenario
+# definitions/templates/jsnapy testfiles are baked into the image.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restor8-scenario
+  namespace: restor8
+  labels:
+    app: restor8-scenario
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restor8-scenario
+  template:
+    metadata:
+      labels:
+        app: restor8-scenario
+    spec:
+      serviceAccountName: restor8-scenario   # read pods in ns topology (rbac.yaml)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restor8-scenario
+          image: localhost:5000/restor8-scenario:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: INVENTORY_URL
+              value: http://restor8-inventory:8080
+            - name: CONNECTOR_URL
+              value: http://restor8-connector:8080
+            - name: TOPOLOGY_URL
+              value: http://restor8-topology:8080
+            - name: SCENARIO_DB
+              value: /data/scenario.db
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: restor8-scenario

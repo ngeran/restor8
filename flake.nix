@@ -51,6 +51,7 @@
         backup = ./services/backup/app;
         restore = ./services/restore/app;
         topology = ./services/topology/app;
+        scenario = ./services/scenario/app;
       };
 
       # Per-system: pkgs + the uv2nix python set shared by every service.

@@ -1,0 +1,20 @@
+# scenario — protocol test engine (Phase 5): render → push → wait for
+# convergence → JSNAPy validate → store. Definitions are YAML + Jinja2
+# templates + JSNAPy testfiles checked into the repo (they're code);
+# run history lives in SQLite on a PVC.
+[project]
+name = "restor8-scenario"
+version = "0.1.0"
+description = "Protocol scenario engine: bgp-full-mesh first, then ISIS/OSPF/LDP-TE/MPLS/L3VPN/TWAMP"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "jinja2",
+    "pyyaml",
+    "restor8-core",
+]
+
+[tool.uv.sources]
+restor8-core = { workspace = true }

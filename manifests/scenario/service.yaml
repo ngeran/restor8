@@ -1,0 +1,16 @@
+# ClusterIP for restor8-scenario.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restor8-scenario
+  namespace: restor8
+  labels:
+    app: restor8-scenario
+spec:
+  selector:
+    app: restor8-scenario
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

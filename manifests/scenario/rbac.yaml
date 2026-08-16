@@ -1,0 +1,33 @@
+# Least-privilege read for the scenario engine: it discovers node peering
+# addresses (launcher pod IPs) by listing pods in the topology namespace.
+# Nothing else — no secrets, no writes, no other namespaces.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: restor8-scenario
+  namespace: restor8
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: restor8-scenario-topology-reader
+  namespace: topology
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: restor8-scenario-topology-reader
+  namespace: topology
+subjects:
+  - kind: ServiceAccount
+    name: restor8-scenario
+    namespace: restor8
+roleRef:
+  kind: Role
+  name: restor8-scenario-topology-reader
+  apiGroup: rbac.authorization.k8s.io

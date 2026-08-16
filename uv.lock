@@ -9,6 +9,7 @@ members = [
     "restor8-core",
     "restor8-inventory",
     "restor8-restore",
+    "restor8-scenario",
     "restor8-topology",
 ]
 
@@ -986,6 +987,29 @@ dependencies = [
 requires-dist = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
+    { name = "uvicorn" },
+]
+
+[[package]]
+name = "restor8-scenario"
+version = "0.1.0"
+source = { virtual = "services/scenario" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "pyyaml" },
+    { name = "restor8-core" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "pyyaml" },
     { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]

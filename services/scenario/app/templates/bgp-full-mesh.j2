@@ -1,0 +1,8 @@
+{# Per-node mesh config (set-format; idempotent set lines). #}
+set policy-options policy-statement EXPORT-DIRECT term 1 from protocol direct
+set policy-options policy-statement EXPORT-DIRECT term 1 then accept
+set protocols bgp group {{ group }} type external
+set protocols bgp group {{ group }} export EXPORT-DIRECT
+{% for peer in peers %}
+set protocols bgp group {{ group }} neighbor {{ peer.ip }} peer-as {{ peer.asn }}
+{% endfor %}

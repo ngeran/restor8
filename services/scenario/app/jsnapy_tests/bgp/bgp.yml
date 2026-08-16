@@ -1,0 +1,14 @@
+# JSNAPy testfile — BGP family (spec §4: one YAML per protocol family,
+# under services/scenario/jsnapy_tests/<protocol>/).
+#
+# All learned peers must be Established. The scenario engine additionally
+# enforces min_peers separately — JSNAPy alone would vacuously pass an
+# empty peer table.
+bgp_neighbors_established:
+  - rpc: get-bgp-summary-information
+  - iterate:
+      xpath: //bgp-peer
+      tests:
+        - is-equal: peer-state, Established
+  - info: "all bgp peers established"
+  - err: "bgp peer(s) not established"
