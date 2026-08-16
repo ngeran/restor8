@@ -80,6 +80,21 @@
                 index index.html;
                 # SPA fallback: serve index.html for client-side routes.
                 location / { try_files $uri $uri/ /index.html; }
+
+                # Same-origin API: the SPA calls relative /api + /ws, so
+                # whatever address reaches THIS pod (pod IP, ClusterIP,
+                # Ingress) serves the complete app — no CORS anywhere.
+                # Resolved at startup against cluster DNS (stable svc name).
+                location /api {
+                  proxy_pass http://restor8-gateway.restor8.svc.cluster.local:8080;
+                }
+                location /ws {
+                  proxy_pass http://restor8-gateway.restor8.svc.cluster.local:8080;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection "upgrade";
+                  proxy_read_timeout 3600s;   # long-lived live feed
+                }
               }
             }
           '';
