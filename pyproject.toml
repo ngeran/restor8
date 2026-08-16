@@ -16,12 +16,15 @@
 members = ["libs/*", "services/*"]
 
 # uv2nix build config (read from the workspace root at flake evaluation;
-# uv itself ignores it). ncclient ships only an sdist whose PEP-517 build
-# imports setuptools — declare it so uv2nix adds it to that build only.
+# uv itself ignores it). ncclient + jsnapy ship only sdists whose PEP-517
+# builds import setuptools — declare them so uv2nix adds it to those
+# builds only.
 # NOTE: keys are lock package NAMES, not name-version (the uv error hint
 # inside the build log suggests "ncclient-0.7.0" — that key never matches).
 [tool.uv.extra-build-dependencies]
 ncclient = ["setuptools"]
+jsnapy = ["setuptools"]
+icdiff = ["setuptools"]
 
 # mypy: run via `just check`, which passes --python-executable pointing at
 # the devShell venv so third-party packages resolve. PyEZ ships no stubs.
@@ -29,5 +32,5 @@ ncclient = ["setuptools"]
 warn_unused_ignores = true
 
 [[tool.mypy.overrides]]
-module = ["jnpr.*"]
+module = ["jnpr.*", "yaml"]
 ignore_missing_imports = true

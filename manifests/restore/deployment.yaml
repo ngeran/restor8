@@ -1,0 +1,70 @@
+# restor8-restore Deployment. Stateless — history lives on backup's PVC,
+# device state with connector. JSNAPy runs file-based inside this pod
+# (JSNAPY_HOME=/tmp/jsnapy materialised by restor8-core at first use).
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restor8-restore
+  namespace: restor8
+  labels:
+    app: restor8-restore
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restor8-restore
+  template:
+    metadata:
+      labels:
+        app: restor8-restore
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restor8-restore
+          image: localhost:5000/restor8-restore:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: INVENTORY_URL
+              value: http://restor8-inventory:8080
+            - name: CONNECTOR_URL
+              value: http://restor8-connector:8080
+            - name: BACKUP_URL
+              value: http://restor8-backup:8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

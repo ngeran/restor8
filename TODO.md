@@ -73,14 +73,29 @@ early, prove it often.
       `*.restor8.home` via Traefik (needs /etc/hosts → 10.0.0.29).
 
 ## Phase 3 — Restore
-- [ ] Scaffold `services/restore`.
-- [ ] `GET /restore/{device_id}/diff/{commit_sha}` → unified diff commit vs
+- [x] Scaffold `services/restore`.
+- [x] `GET /restore/{device_id}/diff/{commit_sha}` → unified diff commit vs
       running config (via connector, no commit yet).
-- [ ] `POST /restore/{device_id}/{commit_sha}` → confirmed-commit push,
-      pre/post JSNAPy `snapcheck`, rollback on failed post-check.
-      (Manual-approve gate per locked decision.)
-- [ ] **Checkpoint:** break a device's BGP config intentionally, restore from
-      last good backup, confirm JSNAPy post-check green + BGP reconverges.
+- [x] `POST /restore/{device_id}/{commit_sha}?approve=true` → confirmed-commit
+      push on a HELD connector session (confirming commit must share the
+      NETCONF session — connector now holds sessions for the window and
+      exposes /session/{id}/confirm|rollback), post-check, auto-confirm on
+      pass / auto-rollback on fail. Manual-approve gate per locked decision.
+- [x] Validation: JSNAPy when a `testdef` is supplied (file-based compare in
+      restor8_core.jsnapy_runner — verified live against real bgp-summary
+      XML, PASS/FAIL discriminated), config-match equality otherwise.
+      Connector gained `/snapshot` (RPC-by-name → XML). Backup gained
+      `GET /backup/{id}/config/{sha}`.
+      JSNAPy quirks (JSNAPY_HOME, two-file config, its %-bug at jsnapy.py:795,
+      stock logging.yml killing our loggers) are encapsulated in the runner.
+- [ ] **Checkpoint:** break p3's BGP intentionally, restore from last good
+      backup, JSNAPy green + BGP reconverges. **BLOCKED on the data-plane
+      question:** the lab (clabernetes, ns `topology`) has no inter-node
+      links configured — eth1–5 exist unconnected (p2↔p3 eBGP over
+      10.99.23.0/30 stayed `Active`); the `-vx` services look like prepared
+      VXLAN endpoints (ports 4799/14789) with nothing wired. Baseline
+      eBGP/lo0 configs pushed to p2/p3 via /push are staged and committed
+      on the devices.
 
 ## Phase 4 — Topology awareness
 - [ ] Scaffold `services/topology`: parse Containerlab `.clab.yml`, map node

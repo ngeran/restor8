@@ -49,6 +49,7 @@
         connector = ./services/connector/app;
         inventory = ./services/inventory/app;
         backup = ./services/backup/app;
+        restore = ./services/restore/app;
       };
 
       # Per-system: pkgs + the uv2nix python set shared by every service.

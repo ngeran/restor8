@@ -32,6 +32,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Literal
+from xml.etree import ElementTree as ET
 
 from jnpr.junos import Device
 from jnpr.junos.utils.config import Config
@@ -206,6 +207,45 @@ class JunosConnection:
             # equivalent to: show configuration                 (fmt="text")
             rpc = self._dev.rpc.get_config(options={"format": fmt})
             return "".join(rpc.itertext()).strip()
+
+    def rpc(self, name: str, **kwargs: str) -> str:
+        """Run an operational RPC by name; return its XML as text.
+
+        The generic read surface for validation snapshots (restore's
+        JSNAPy pre/post checks, Phase 5's convergence polling). Kept here
+        — not as raw PyEZ passthrough in services — so every device
+        interaction stays inside the event-emitting wrapper.
+
+        Args:
+            name: Junos RPC identifier, e.g.
+                ``get_bgp_summary_information``
+                (equivalent to: ``show bgp summary``),
+                ``get_interface_information`` (``show interfaces``),
+                ``get_mpls_lsp_information`` (``show mpls lsp``).
+            **kwargs: RPC arguments as PyEZ builds them (e.g.
+                ``terse=True``, ``interface_name="et-0/0/0"``).
+
+        Returns:
+            The RPC reply serialised as an XML string (namespaces kept —
+            JSNAPy tests match on them).
+
+        Raises:
+            Restor8Error: unknown RPC name (AttributeError mapped) or
+                transport failure.
+            DeviceRpcTimeoutError: RPC exceeded the timeout.
+        """
+        self._require_open()
+        with self._guard(Stage.CONNECTED):
+            assert self._dev is not None  # noqa: S101 — _require_open narrows
+            try:
+                fn = getattr(self._dev.rpc, name)
+            except AttributeError as exc:
+                raise Restor8Error(
+                    f"unknown RPC '{name}'", device=self.host
+                ) from exc
+            # equivalent to: the `show …` command matching `name`
+            result = fn(**kwargs)
+            return ET.tostring(result, encoding="unicode")
 
     def push_config(
         self,

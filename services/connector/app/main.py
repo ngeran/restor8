@@ -16,6 +16,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+import time
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -111,6 +113,86 @@ def _log_event(event: DeviceEvent) -> None:
     later ship the same objects over WebSocket.
     """
     events_log.info(json.dumps(event.model_dump(mode="json"), default=str))
+
+
+# ── held sessions ──────────────────────────────────────────────────────
+#
+# A confirming commit must come from the SAME NETCONF session that issued
+# `commit confirmed`, so the validate-then-confirm flow (restore/scenario)
+# needs connector to hold a session open across requests: /push with
+# confirm_now=false parks it here for the confirmed-commit window; /session
+# then confirms or rolls it back. If nobody decides in time, the DEVICE
+# auto-reverts on its own (that's the whole point of confirmed commits) —
+# the sweeper below only reaps our side so nothing leaks.
+
+
+class SessionRegistry:
+    """Thread-safe registry of held NETCONF sessions with expiry."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._sessions: dict[str, tuple[JunosConnection, float]] = {}
+
+    def hold(self, jc: JunosConnection, ttl_seconds: float) -> None:
+        """Park a session until its confirmed-commit window closes."""
+        with self._lock:
+            self._sessions[jc.session_id] = (jc, time.monotonic() + ttl_seconds)
+
+    def take(self, session_id: str) -> JunosConnection | None:
+        """Pop a live session (None if unknown or expired)."""
+        with self._lock:
+            entry = self._sessions.pop(session_id, None)
+        if entry is None:
+            return None
+        jc, expires_at = entry
+        if time.monotonic() > expires_at:
+            jc.close()
+            return None
+        return jc
+
+    def peek(self, session_id: str) -> dict[str, object] | None:
+        """Status of a held session without taking it."""
+        with self._lock:
+            entry = self._sessions.get(session_id)
+        if entry is None:
+            return None
+        jc, expires_at = entry
+        return {
+            "session_id": session_id,
+            "host": jc.host,
+            "expires_in": round(max(0.0, expires_at - time.monotonic()), 1),
+        }
+
+    def sweep(self) -> None:
+        """Close and drop expired sessions (device already self-reverted)."""
+        now = time.monotonic()
+        with self._lock:
+            expired = [
+                (sid, jc)
+                for sid, (jc, at) in self._sessions.items()
+                if at < now
+            ]
+            for sid, _ in expired:
+                del self._sessions[sid]
+        # close outside the lock — close() does device I/O
+        for _, jc in expired:
+            jc.close()
+
+
+def _sweep_forever() -> None:
+    """Reap held sessions every 15s for the process lifetime."""
+    while True:
+        time.sleep(15)
+        sessions.sweep()
+
+
+sessions = SessionRegistry()
+
+
+@app.on_event("startup")
+def _start_sweeper() -> None:
+    """Launch the session reaper (daemon — dies with the process)."""
+    threading.Thread(target=_sweep_forever, daemon=True).start()
 
 
 @app.get("/")
@@ -259,7 +341,13 @@ class PushResponse(BaseModel):
 
 @app.post("/push", response_model=PushResponse)
 def push_config(req: PushRequest) -> PushResponse:
-    """lock → load → diff → commit confirmed (→ confirm) → unlock → close.
+    """lock → load → diff → commit confirmed → unlock.
+
+    ``confirm_now=True`` finalises immediately and closes the session.
+    ``confirm_now=False`` HOLDS the session for the confirmed-commit
+    window: the caller validates (JSNAPy) and then POSTs
+    ``/session/{id}/confirm`` or ``/session/{id}/rollback`` — the
+    confirming commit must come from this same NETCONF session.
 
     Raises:
         HTTPException 422: no resolvable credentials.
@@ -273,6 +361,7 @@ def push_config(req: PushRequest) -> PushResponse:
         req.host, user, auth, port=req.port, timeout=req.timeout,
         on_event=_log_event,
     )
+    held = False
     try:
         jc.connect()
         diff = jc.push_config(
@@ -282,16 +371,20 @@ def push_config(req: PushRequest) -> PushResponse:
             confirm_minutes=req.confirm_minutes,
             comment=req.comment,
         )
-        confirmed = False
         if req.confirm_now:
             jc.confirm_commit()
             confirmed = True
+        else:
+            sessions.hold(jc, ttl_seconds=req.confirm_minutes * 60)
+            held = True
+            confirmed = False
     except Restor8Error as exc:
         raise _device_error(exc) from exc
     except Exception as exc:
         raise _unmapped_error(req.host, exc) from exc
     finally:
-        jc.close()
+        if not held:
+            jc.close()
     return PushResponse(session_id=jc.session_id, diff=diff, confirmed=confirmed)
 
 
@@ -320,3 +413,125 @@ def _unmapped_error(host: str, exc: Exception) -> HTTPException:
             "message": str(exc),
         },
     )
+
+
+# ── held-session lifecycle (companion to /push confirm_now=false) ──────
+
+
+class SessionActionResponse(BaseModel):
+    """Outcome of a confirm/rollback on a held session."""
+
+    session_id: str
+    action: str
+    diff: str = ""
+    """Empty for confirm; the rollback diff (old ← new) for rollback."""
+
+
+@app.get("/session/{session_id}")
+def session_status(session_id: str) -> dict[str, object]:
+    """Status of a held session (host + remaining window).
+
+    Raises:
+        HTTPException 404: unknown/expired session.
+    """
+    status = sessions.peek(session_id)
+    if status is None:
+        raise HTTPException(404, f"session {session_id} not held (unknown or expired)")
+    return status
+
+
+@app.post("/session/{session_id}/confirm", response_model=SessionActionResponse)
+def session_confirm(session_id: str) -> SessionActionResponse:
+    """Finalise a held confirmed-commit (validation passed).
+
+    Raises:
+        HTTPException 404: unknown/expired session — if the window lapsed,
+            the device already self-reverted.
+    """
+    jc = sessions.take(session_id)
+    if jc is None:
+        raise HTTPException(404, f"session {session_id} not held (window expired?)")
+    try:
+        jc.confirm_commit()
+    except Restor8Error as exc:
+        jc.close()
+        raise _device_error(exc) from exc
+    jc.close()
+    return SessionActionResponse(session_id=session_id, action="confirm")
+
+
+@app.post("/session/{session_id}/rollback", response_model=SessionActionResponse)
+def session_rollback(session_id: str) -> SessionActionResponse:
+    """Roll a held confirmed-commit back to the previous config.
+
+    The permanent-commit rollback lives in JunosConnection.rollback()
+    (restores the previously-committed known-good config).
+
+    Raises:
+        HTTPException 404: unknown/expired session.
+    """
+    jc = sessions.take(session_id)
+    if jc is None:
+        raise HTTPException(404, f"session {session_id} not held (window expired?)")
+    try:
+        diff = jc.rollback()
+    except Restor8Error as exc:
+        jc.close()
+        raise _device_error(exc) from exc
+    jc.close()
+    return SessionActionResponse(session_id=session_id, action="rollback", diff=diff)
+
+
+# ── validation snapshots ──────────────────────────────────────────────
+
+
+class SnapshotRequest(ConnectRequest):
+    """Pull one operational RPC reply as XML (JSNAPy snapshot material)."""
+
+    rpc: str = Field(
+        default="get_bgp_summary_information",
+        description="Junos RPC name — get_bgp_summary_information "
+        "(show bgp summary), get_interface_information (show interfaces), …",
+    )
+    args: dict[str, str] = Field(
+        default_factory=dict,
+        description="RPC arguments, e.g. {\"terse\": \"true\"}",
+    )
+
+
+class SnapshotResponse(BaseModel):
+    """The RPC reply as an XML string."""
+
+    session_id: str
+    rpc: str
+    xml: str
+
+
+@app.post("/snapshot", response_model=SnapshotResponse)
+def snapshot(req: SnapshotRequest) -> SnapshotResponse:
+    """Open a session, run one operational RPC, close.
+
+    Restore (Phase 3) snapshots pre/post state around a config push for
+    JSNAPy validation; scenario (Phase 5) polls convergence the same way.
+
+    Raises:
+        HTTPException 422: no resolvable credentials.
+        HTTPException 502: typed device error (unknown RPC included).
+    """
+    user, auth = _resolve_creds(req)
+    if not user or not auth:
+        raise HTTPException(status_code=422, detail="no credentials (see /connect)")
+    jc = JunosConnection(
+        req.host, user, auth, port=req.port, timeout=req.timeout,
+        on_event=_log_event,
+    )
+    try:
+        jc.connect()
+        xml = jc.rpc(req.rpc, **req.args)
+    except Restor8Error as exc:
+        raise _device_error(exc) from exc
+    except Exception as exc:
+        raise _unmapped_error(req.host, exc) from exc
+    finally:
+        jc.close()
+    return SnapshotResponse(session_id=jc.session_id, rpc=req.rpc, xml=xml)

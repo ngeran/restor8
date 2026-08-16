@@ -196,6 +196,47 @@ def backup_device(device_id: int, fmt: str = "text") -> BackupResult:
     )
 
 
+class BackupContent(BaseModel):
+    """A device's config file content at one commit (restore's source)."""
+
+    device: str
+    sha: str
+    date: str
+    config: str
+
+
+@app.get("/backup/{device_id}/config/{sha}", response_model=BackupContent)
+def config_at(device_id: int, sha: str) -> BackupContent:
+    """The device's backed-up config at a commit — restore's data source.
+
+    Args:
+        device_id: inventory ID.
+        sha: commit SHA (short or full) or the literal ``latest``.
+
+    Returns:
+        The config text as stored at that commit.
+
+    Raises:
+        HTTPException 404: unknown device, unknown commit, or the device
+            had no backup at that commit.
+    """
+    device = _device(device_id)
+    rel = f"devices/{device['name']}/running.cfg"
+    with _git_lock:
+        repo = _repo()
+        commit = repo.head.commit if sha == "latest" else repo.commit(sha)
+        try:
+            blob = commit.tree / rel
+            content = blob.data_stream.read().decode()
+        except (KeyError, TypeError, ValueError) as exc:
+            raise HTTPException(
+                404, f"no backup for {device['name']} at {commit.hexsha[:12]}"
+            ) from exc
+        date = commit.committed_datetime.isoformat()
+        hexsha = commit.hexsha[:12]
+    return BackupContent(device=str(device["name"]), sha=hexsha, date=date, config=content)
+
+
 @app.get("/backup/{device_id}/history", response_model=list[HistoryEntry])
 def history(device_id: int) -> list[HistoryEntry]:
     """Commit history for one device's config file.

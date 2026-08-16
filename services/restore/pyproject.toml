@@ -1,0 +1,18 @@
+# restore — diff + gated push-back with pre/post validation (Phase 3).
+# Chains backup (historical config) + connector (current config, push,
+# held session, snapshots) over HTTP; JSNAPy comparison runs in-process
+# via restor8-core's file-based runner (no device sessions of its own).
+[project]
+name = "restor8-restore"
+version = "0.1.0"
+description = "Restore service: diff against Git history, gated confirmed-commit push, JSNAPy validation"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "restor8-core",
+]
+
+[tool.uv.sources]
+restor8-core = { workspace = true }

@@ -8,6 +8,7 @@ members = [
     "restor8-connector",
     "restor8-core",
     "restor8-inventory",
+    "restor8-restore",
 ]
 
 [[package]]
@@ -240,6 +241,15 @@ wheels = [
 ]
 
 [[package]]
+name = "configparser"
+version = "7.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/ac/ea19242153b5e8be412a726a70e82c7b5c1537c83f61b20995b2eda3dcd7/configparser-7.2.0.tar.gz", hash = "sha256:b629cc8ae916e3afbd36d1b3d093f34193d851e11998920fdcfc4552218b7b70", size = 51273, upload-time = "2025-03-08T16:04:09.339Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/09/fe/f61e7129e9e689d9e40bbf8a36fb90f04eceb477f4617c02c6a18463e81f/configparser-7.2.0-py3-none-any.whl", hash = "sha256:fee5e1f3db4156dcd0ed95bc4edfa3580475537711f67a819c966b389d09ce62", size = 17232, upload-time = "2025-03-08T16:04:07.743Z" },
+]
+
+[[package]]
 name = "cryptography"
 version = "50.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -312,6 +322,15 @@ wheels = [
 ]
 
 [[package]]
+name = "future"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a7/b2/4140c69c6a66432916b26158687e821ba631a4c9273c474343badf84d3ba/future-1.0.0.tar.gz", hash = "sha256:bd2968309307861edae1458a4f8a4f3598c03be43b97521076aebf5d94c07b05", size = 1228490, upload-time = "2024-02-21T11:52:38.461Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/da/71/ae30dadffc90b9006d77af76b393cb9dfbfc9629f339fc1574a1c52e6806/future-1.0.0-py3-none-any.whl", hash = "sha256:929292d34f5872e70396626ef385ec22355a1fae8ad29e1a734c3e43f9fbc216", size = 491326, upload-time = "2024-02-21T11:52:35.956Z" },
+]
+
+[[package]]
 name = "gitdb"
 version = "4.0.12"
 source = { registry = "https://pypi.org/simple" }
@@ -373,6 +392,12 @@ wheels = [
 ]
 
 [[package]]
+name = "icdiff"
+version = "1.9.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8f/7d/a6ae9d58faa076bda8930c167204cac14d44941cba60c2642e2f4aac6c44/icdiff-1.9.1.tar.gz", hash = "sha256:66972dd03318da55280991db375d3ef6b66d948c67af96c1ebdb21587e86655e", size = 9066, upload-time = "2017-06-07T10:45:01.98Z" }
+
+[[package]]
 name = "idna"
 version = "3.18"
 source = { registry = "https://pypi.org/simple" }
@@ -400,6 +425,24 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
+]
+
+[[package]]
+name = "jsnapy"
+version = "1.3.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama" },
+    { name = "configparser" },
+    { name = "future" },
+    { name = "icdiff" },
+    { name = "junos-eznc" },
+    { name = "lxml" },
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5d/17/7222faab43f44e438e7176ed8bf6eac688baeacdb97af0a7beba5b58bc36/jsnapy-1.3.8.tar.gz", hash = "sha256:b1a4c6f048af4b048ff843541da94384320876b80b0a8b97c99fb00b8614e57d", size = 62569, upload-time = "2024-08-06T07:04:29.197Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/10/d3/962fd1a8bc2e44019368dc2d293fe25f938c8ccac6d7fbce57b14f023e44/jsnapy-1.3.8-py2.py3-none-any.whl", hash = "sha256:5202fd0910cecd32efdca7c635bf0308153a10677522a46469788b78c16c10a6", size = 50184, upload-time = "2024-08-06T07:04:27.043Z" },
 ]
 
 [[package]]
@@ -900,12 +943,14 @@ name = "restor8-core"
 version = "0.1.0"
 source = { editable = "libs/restor8_core" }
 dependencies = [
+    { name = "jsnapy" },
     { name = "junos-eznc" },
     { name = "pydantic" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "jsnapy", specifier = ">=1.3" },
     { name = "junos-eznc", specifier = ">=2.6" },
     { name = "pydantic", specifier = ">=2" },
 ]
@@ -922,6 +967,25 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi" },
+    { name = "uvicorn" },
+]
+
+[[package]]
+name = "restor8-restore"
+version = "0.1.0"
+source = { virtual = "services/restore" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "restor8-core" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]
 
