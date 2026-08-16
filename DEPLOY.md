@@ -204,6 +204,19 @@ kubectl -n restor8 exec -it deploy/restor8-connector -- sh   # image has no shel
 kubectl -n restor8 delete deployment,svc --all               # teardown services (keeps ns + secret)
 ```
 
+## Exposing via the host browser (Ingress)
+
+`manifests/ingress.yaml` routes hostnames through k3s's Traefik — applied
+by every `just deploy`. Map the names once (sudo, one-time):
+
+```bash
+sudo sh -c 'echo "10.0.0.29 connector.restor8.home inventory.restor8.home restor8.home" >> /etc/hosts'
+```
+
+Then browse: `http://connector.restor8.home/docs` (Swagger UI),
+`http://inventory.restor8.home/devices` (live registry JSON). The Phase 7
+frontend will live at `http://restor8.home`.
+
 ## Deploying the *next* service (from Phase 1 on)
 
 The steps are already generalized — nothing above is connector-specific

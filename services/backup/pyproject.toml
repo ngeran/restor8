@@ -1,0 +1,16 @@
+# backup — running config → Git history (Phase 2). Calls connector over
+# HTTP (never imports PyEZ — connector is the only device-toucher) and
+# commits pulled configs into a Git repo on a PVC via GitPython (which
+# drives the git CLI — hence the git binary baked into this image, see
+# flake.nix).
+[project]
+name = "restor8-backup"
+version = "0.1.0"
+description = "Config backup service: pull via connector, commit to Git history"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "GitPython",
+]

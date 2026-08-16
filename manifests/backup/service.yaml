@@ -1,0 +1,17 @@
+# ClusterIP for restor8-backup — restore (Phase 3) and the gateway read
+# backup history through here.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restor8-backup
+  namespace: restor8
+  labels:
+    app: restor8-backup
+spec:
+  selector:
+    app: restor8-backup
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

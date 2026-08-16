@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from restor8_core.events import DeviceEvent
-from restor8_core.junos import JunosConnection
+from restor8_core.junos import ConfigFormat, ConfigMode, JunosConnection
 from restor8_core.models import Restor8Error
 
 log = logging.getLogger("restor8.connector")
@@ -48,18 +48,52 @@ app = FastAPI(
 class ConnectRequest(BaseModel):
     """One-shot connectivity probe payload.
 
-    ``user``/``auth`` may be omitted in-cluster: the deployment injects
-    the shared lab credential (k8s Secret ``restor8/lab-auth``) as
-    ``LAB_USER``/``LAB_PASSWORD`` env vars. Explicit values win.
+    Credential resolution order (first hit wins):
+
+    1. explicit ``user``/``auth`` in the request,
+    2. ``auth_ref`` → env ``LAB_AUTH_<REF>_USER``/``LAB_AUTH_<REF>_PASSWORD``
+       (ref upper-cased, dashes→underscores; each k8s Secret the cluster
+       knows is injected as such a pair — see the Deployment),
+    3. the default lab credential env ``LAB_USER``/``LAB_PASSWORD``
+       (Secret ``restor8/lab-auth``).
     """
 
     host: str = Field(description="device mgmt IP/hostname")
     port: int = Field(default=830, description="NETCONF port (Junos default 830)")
-    user: str | None = Field(default=None, description="SSH user; default LAB_USER")
-    auth: str | None = Field(
-        default=None, description="SSH password; default LAB_PASSWORD"
+    user: str | None = Field(default=None, description="SSH user; overrides auth_ref/env")
+    auth: str | None = Field(default=None, description="SSH password; overrides auth_ref/env")
+    auth_ref: str | None = Field(
+        default=None,
+        description="inventory auth_ref (k8s Secret name), e.g. "
+        "'lab-auth-root' → env LAB_AUTH_ROOT_USER/LAB_AUTH_ROOT_PASSWORD "
+        "(upper-cased, dashes→underscores, _USER/_PASSWORD appended)",
     )
     timeout: int = Field(default=30, description="per-RPC timeout (seconds)")
+
+
+def _resolve_creds(req: ConnectRequest) -> tuple[str | None, str | None]:
+    """Resolve (user, password) per the order documented on ConnectRequest.
+
+    Args:
+        req: any request carrying the credential fields.
+
+    Returns:
+        The (user, password) pair; either may be None (caller 422s).
+    """
+    if req.user and req.auth:
+        return req.user, req.auth
+    if req.auth_ref:
+        # auth_ref is a Secret name verbatim: "lab-auth-root" →
+        # LAB_AUTH_ROOT_USER / LAB_AUTH_ROOT_PASSWORD. Checked BEFORE the
+        # default pair — in-cluster the defaults are always set, so an
+        # auth_ref that lost to them would silently authenticate with the
+        # wrong credential.
+        prefix = req.auth_ref.upper().replace("-", "_")
+        user = req.user or os.environ.get(f"{prefix}_USER")
+        auth = req.auth or os.environ.get(f"{prefix}_PASSWORD")
+        if user and auth:
+            return user, auth
+    return req.user or os.environ.get("LAB_USER"), req.auth or os.environ.get("LAB_PASSWORD")
 
 
 class ConnectResponse(BaseModel):
@@ -111,15 +145,13 @@ def connect(req: ConnectRequest) -> ConnectResponse:
         HTTPException 502: device unreachable / auth failed / RPC timeout
             (typed restor8 errors, original Junos message intact).
     """
-    user = req.user or os.environ.get("LAB_USER")
-    auth = req.auth or os.environ.get("LAB_PASSWORD")
+    user, auth = _resolve_creds(req)
     if not user or not auth:
         raise HTTPException(
             status_code=422,
             detail=(
-                "no credentials: pass user/auth, or inject the shared lab "
-                "credential via env LAB_USER/LAB_PASSWORD (k8s Secret "
-                "restor8/lab-auth)"
+                "no credentials: pass user/auth or auth_ref, or inject the "
+                "lab credential via env (k8s Secrets restor8/lab-auth*)"
             ),
         )
 
@@ -134,32 +166,157 @@ def connect(req: ConnectRequest) -> ConnectResponse:
     try:
         facts = jc.connect()
     except Restor8Error as exc:
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": exc.__class__.__name__,
-                "device": exc.device,
-                "stage": exc.stage,
-                "message": str(exc),
-            },
-        ) from exc
+        raise _device_error(exc) from exc
     except Exception as exc:
         # Unmapped failures must surface as structured errors too — a bare
         # 500 is undiscoverable from the UI. The traceback goes to the
         # service log for diagnosis.
-        log.exception("unmapped failure connecting to %s", req.host)
-        raise HTTPException(
-            status_code=502,
-            detail={
-                "error": exc.__class__.__name__,
-                "device": req.host,
-                "stage": "",
-                "message": str(exc),
-            },
-        ) from exc
+        raise _unmapped_error(req.host, exc) from exc
     finally:
         jc.close()
 
     return ConnectResponse(
         session_id=jc.session_id, facts=facts.model_dump(mode="json")
+    )
+
+
+class ConfigRequest(ConnectRequest):
+    """Pull the running configuration (backup service's device read)."""
+
+    fmt: ConfigFormat = Field(
+        default="text",
+        description="config format — MUST stay stable per device or Git "
+        "diffs become meaningless",
+    )
+
+
+class ConfigResponse(BaseModel):
+    """The device's running config as a string."""
+
+    session_id: str
+    config: str
+
+
+@app.post("/config", response_model=ConfigResponse)
+def get_config(req: ConfigRequest) -> ConfigResponse:
+    """Open a session, fetch the running config, close.
+
+    Full event sequence (resolving → … → connected → closed) is logged
+    like /connect — backup can stream it per device.
+
+    Raises:
+        HTTPException 422: no resolvable credentials.
+        HTTPException 502: typed device error (unreachable/auth/rpc).
+    """
+    user, auth = _resolve_creds(req)
+    if not user or not auth:
+        raise HTTPException(status_code=422, detail="no credentials (see /connect)")
+    jc = JunosConnection(
+        req.host, user, auth, port=req.port, timeout=req.timeout,
+        on_event=_log_event,
+    )
+    try:
+        jc.connect()
+        config = jc.get_config(req.fmt)
+    except Restor8Error as exc:
+        raise _device_error(exc) from exc
+    except Exception as exc:
+        raise _unmapped_error(req.host, exc) from exc
+    finally:
+        jc.close()
+    return ConfigResponse(session_id=jc.session_id, config=config)
+
+
+class PushRequest(ConfigRequest):
+    """Push config through the confirmed-commit pipeline.
+
+    ``confirm_now=True`` (default) finalises the commit immediately —
+    right for idempotent pushes. ``confirm_now=False`` leaves the
+    confirmed-commit window open for validation (JSNAPy post-check);
+    a confirming commit must come from the SAME NETCONF session, so
+    finalising those is deferred to connector's session-holding API,
+    which lands with restore (Phase 3) — until then, the window simply
+    expires and the device self-reverts.
+    """
+
+    payload: str = Field(description="config text in `fmt` form")
+    mode: ConfigMode = Field(
+        default="merge",
+        description="merge (additive) | override (whole-config replace)",
+    )
+    confirm_minutes: int = Field(default=2, description="confirmed-commit window")
+    comment: str = Field(default="restor8", description="Junos commit comment")
+    confirm_now: bool = Field(default=True, description="finalise immediately")
+
+
+class PushResponse(BaseModel):
+    """The pending diff and whether the commit was finalised."""
+
+    session_id: str
+    diff: str
+    confirmed: bool
+
+
+@app.post("/push", response_model=PushResponse)
+def push_config(req: PushRequest) -> PushResponse:
+    """lock → load → diff → commit confirmed (→ confirm) → unlock → close.
+
+    Raises:
+        HTTPException 422: no resolvable credentials.
+        HTTPException 502: typed device error; the Junos error text
+            (syntax error, lock held, …) rides in ``detail.message``.
+    """
+    user, auth = _resolve_creds(req)
+    if not user or not auth:
+        raise HTTPException(status_code=422, detail="no credentials (see /connect)")
+    jc = JunosConnection(
+        req.host, user, auth, port=req.port, timeout=req.timeout,
+        on_event=_log_event,
+    )
+    try:
+        jc.connect()
+        diff = jc.push_config(
+            req.payload,
+            fmt=req.fmt,
+            mode=req.mode,
+            confirm_minutes=req.confirm_minutes,
+            comment=req.comment,
+        )
+        confirmed = False
+        if req.confirm_now:
+            jc.confirm_commit()
+            confirmed = True
+    except Restor8Error as exc:
+        raise _device_error(exc) from exc
+    except Exception as exc:
+        raise _unmapped_error(req.host, exc) from exc
+    finally:
+        jc.close()
+    return PushResponse(session_id=jc.session_id, diff=diff, confirmed=confirmed)
+
+
+def _device_error(exc: Restor8Error) -> HTTPException:
+    """Build the structured 502 for a typed device error."""
+    return HTTPException(
+        status_code=502,
+        detail={
+            "error": exc.__class__.__name__,
+            "device": exc.device,
+            "stage": exc.stage,
+            "message": str(exc),
+        },
+    )
+
+
+def _unmapped_error(host: str, exc: Exception) -> HTTPException:
+    """Build the structured 502 for an unmapped failure; log traceback."""
+    log.exception("unmapped failure on %s", host)
+    return HTTPException(
+        status_code=502,
+        detail={
+            "error": exc.__class__.__name__,
+            "device": host,
+            "stage": "",
+            "message": str(exc),
+        },
     )

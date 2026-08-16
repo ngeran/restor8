@@ -30,6 +30,7 @@ deploy svc="connector": (push svc)
     #!/usr/bin/env bash
     set -euo pipefail
     kubectl apply -f manifests/namespace.yaml
+    kubectl apply -f manifests/ingress.yaml
     kubectl apply -f manifests/{{svc}}/
     kubectl -n {{ns}} rollout restart deployment/restor8-{{svc}}
     kubectl -n {{ns}} rollout status deployment/restor8-{{svc}} --timeout=120s || {

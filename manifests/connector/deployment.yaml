@@ -4,10 +4,12 @@
 # Always is required: the tag is fixed (:latest) and re-pushed, so Always
 # forces k3s to fetch the newest digest each rollout.
 #
-# LAB_USER/LAB_PASSWORD come from the shared lab credential
-# (Secret restor8/lab-auth — see justfile doctor for the create command).
-# `optional: true` so the pod still starts without the secret; POST
-# /connect then returns 422 until it exists or the request carries creds.
+# Credential envs: LAB_USER/LAB_PASSWORD (Secret restor8/lab-auth) are the
+# default pair; every additional Secret is injected as
+# LAB_AUTH_<REF>_USER/_PASSWORD so requests can pick one via `auth_ref`
+# (inventory's auth_ref column: P-1 → lab-auth, the clab nodes →
+# lab-auth-root). `optional: true` so the pod starts even before a Secret
+# exists; requests then 422 until it does.
 #
 # Safe-by-default: non-root (UID 1000, matches flake.nix config.User),
 # read-only root fs (emptyDir /tmp for temp writes), all capabilities
@@ -56,6 +58,18 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: lab-auth
+                  key: LAB_PASSWORD
+                  optional: true
+            - name: LAB_AUTH_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: lab-auth-root
+                  key: LAB_USER
+                  optional: true
+            - name: LAB_AUTH_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: lab-auth-root
                   key: LAB_PASSWORD
                   optional: true
           securityContext:

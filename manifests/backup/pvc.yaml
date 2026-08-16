@@ -1,0 +1,13 @@
+# Git backup-history repo volume. Text configs are tiny; 1Gi holds
+# effectively unlimited history for a 10-node lab.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: restor8-backup
+  namespace: restor8
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi

@@ -48,6 +48,7 @@
       serviceApps = {
         connector = ./services/connector/app;
         inventory = ./services/inventory/app;
+        backup = ./services/backup/app;
       };
 
       # Per-system: pkgs + the uv2nix python set shared by every service.
@@ -106,11 +107,16 @@
             printf 'root:x:0:0::/root:/bin/sh\nappuser:x:1000:1000::/app:/bin/sh\n' > $out/etc/passwd
             printf 'root:x:0:\nappuser:x:1000:\n'                                 > $out/etc/group
           '';
+
+          # The one per-service image-content deviation (spec §2 anticipated
+          # stateful backup): GitPython drives the git CLI, so the backup
+          # image carries the git binary.
+          extraRoot = pkgs.lib.optionals (name == "backup") [ pkgs.git ];
         in
         pkgs.dockerTools.buildImage {
           name = "localhost:5000/restor8-${name}";
           tag = "latest";
-          copyToRoot = [ venv appSource nonRootUser ];
+          copyToRoot = [ venv appSource nonRootUser ] ++ extraRoot;
           config = {
             User = "1000:1000";
             WorkingDir = "/app";

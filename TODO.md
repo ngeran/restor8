@@ -54,12 +54,23 @@ early, prove it often.
       containerlab YAML — decide there.
 
 ## Phase 2 — Backup
-- [ ] Scaffold `services/backup` (calls connector over HTTP, never imports PyEZ).
-- [ ] `POST /backup/{device_id}` → connector pulls config → git commit
+- [x] Scaffold `services/backup` (calls connector over HTTP, never imports PyEZ).
+- [x] `POST /backup/{device_id}` → connector pulls config → git commit
       (`backup: <device> @ <timestamp>`) into the device's directory (PVC).
-- [ ] `GET /backup/{device_id}/history` → `git log` for that path.
-- [ ] **Checkpoint:** back up a real device twice with a manual config change in
-      between; confirm two distinct commits with a real diff.
+      Idempotent: unchanged config → no commit. Repo on 1Gi PVC (`/data/repo`),
+      git binary baked into the image (the one flagged image deviation).
+- [x] `GET /backup/{device_id}/history` → `git log` for that path.
+- [x] **Checkpoint PASSED 2026-08-16** — p3: backup → commit `d1d78b3132d5`;
+      re-backup → `changed=false` (no no-op commits); pushed lo0 description
+      via connector `/push` (confirmed-commit pipeline, diff returned);
+      backup again → commit `60ae0c773bde`; history shows both.
+      Bonus landed for Phase 2/3: connector `/config` (pull) + `/push`
+      endpoints, per-device `auth_ref` credential resolution (Secret
+      `restor8/lab-auth-root` = root/clab123 for the 9 clab nodes; P-1 keeps
+      admin@lab-auth) — all 10 nodes verified with real facts, inventory
+      names corrected to real hostnames (lowercase p2…ce2; only P-1 is
+      uppercase). Ingress added: connector/inventory at
+      `*.restor8.home` via Traefik (needs /etc/hosts → 10.0.0.29).
 
 ## Phase 3 — Restore
 - [ ] Scaffold `services/restore`.
