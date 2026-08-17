@@ -38,6 +38,10 @@ just doctor              # k3s + registry + lab-auth secret + git-index pre-flig
 **Full deploy runbook with explanations: [DEPLOY.md](DEPLOY.md)** — namespace,
 credential Secret, deploy, in-cluster wire test, event stream, troubleshooting.
 
+**Operating manual: [RUNBOOK.md](RUNBOOK.md)** — using the app, changing the
+topology plan, adding cRPDs and point-to-point links (hive + restor8 sides),
+validation, and the troubleshooting table.
+
 Deps live in `pyproject.toml` + one `uv.lock` for the whole workspace —
 edit, `uv lock`, `just build`. No requirements.txt, ever.
 
