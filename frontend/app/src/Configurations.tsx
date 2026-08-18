@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type BackupEntry, type Device, type Template } from "./api";
 import { useToast } from "./toast";
-import { Skeleton } from "./ui";
+import { ConfirmModal, Skeleton } from "./ui";
 
 // The flagship: read the running config, edit via grouped template forms
 // (or raw set-format), preview the payload, push (merge or override),
@@ -140,12 +140,28 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
   const [mode, setMode] = useState<"merge" | "override">("merge");
   const [result, setResult] = useState<{ ok: boolean; text: string; diff: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // §3: two-phase confirmed-commit — default ON. A push parks in the
+  // device's 5-minute window; the human confirms or rolls back below.
+  const [twoPhase, setTwoPhase] = useState(true);
+  const [pending, setPending] = useState<{ id: string; secs: number } | null>(null);
+  const [needOverrideModal, setNeedOverrideModal] = useState(false);
 
   useEffect(() => {
     api.templates().then(setTemplates).catch(() => {});
   }, []);
 
   const tpl = templates.find((t) => t.name === tplName);
+
+  // authoritative countdown from connector's held-session clock
+  useEffect(() => {
+    if (!pending) return;
+    const t = window.setInterval(() => {
+      api.sessionStatus(pending.id)
+        .then((s) => setPending((p) => (p ? { ...p, secs: Math.round(s.expires_in) } : null)))
+        .catch(() => setPending(null)); // window lapsed → device self-reverted
+    }, 3000);
+    return () => clearInterval(t);
+  }, [pending?.id]);
 
   useEffect(() => {
     // defaults from the schema whenever the template changes
@@ -175,7 +191,7 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
     }
   };
 
-  const push = async () => {
+  const doPush = async () => {
     setBusy(true);
     setResult(null);
     try {
@@ -185,16 +201,52 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
         mode,
         fmt: "set",
         comment: `restor8-ui editor (${tplName === "__raw" ? "raw" : tplName})`,
-        confirm_now: true,
+        confirm_now: !twoPhase,
       });
-      setResult({ ok: true, text: r.confirmed ? "committed" : "pending confirmation window", diff: r.diff });
-      toast.ok(`push to ${device.name}: ${r.confirmed ? "committed" : "awaiting confirmation"}`);
+      if (r.confirmed) {
+        setResult({ ok: true, text: "committed", diff: r.diff });
+        toast.ok(`push to ${device.name}: committed`);
+      } else {
+        setPending({ id: r.session_id, secs: 300 });
+        setResult({ ok: true, text: "awaiting confirmation", diff: r.diff });
+        toast.warn(`push to ${device.name}: in the confirmed-commit window`, "confirm or roll back below");
+      }
       onPushed();
     } catch (e) {
       setResult({ ok: false, text: "", diff: "" });
       toast.fromError(`push to ${device.name} failed`, e);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const push = () => {
+    if (mode === "override") { setNeedOverrideModal(true); return; }
+    doPush();
+  };
+
+  const confirmNow = async () => {
+    if (!pending) return;
+    try {
+      await api.sessionConfirm(pending.id);
+      toast.ok(`${device.name}: commit confirmed`, "candidate is now permanent");
+      setPending(null);
+      setResult(null);
+      onPushed();
+    } catch (e) {
+      toast.fromError("confirm failed", e);
+    }
+  };
+
+  const rollbackNow = async () => {
+    if (!pending) return;
+    try {
+      const r = await api.sessionRollback(pending.id);
+      toast.warn(`${device.name}: rolled back`, "device returned to previous config");
+      setPending(null);
+      setResult({ ok: true, text: "rolled back — device at previous config", diff: r.diff ?? "" });
+    } catch (e) {
+      toast.fromError("rollback failed", e);
     }
   };
 
@@ -269,6 +321,14 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
               payload (editable)
             </span>
             <div className="flex items-center gap-1">
+              <button
+                onClick={() => setTwoPhase((v) => !v)}
+                title="confirmed-commit window: push lands, you confirm or roll back within 5 minutes"
+                className={`mr-2 rounded-[0.25rem] px-2 py-0.5 font-mono text-[11px] ${twoPhase ? "text-warn" : "text-dimmer-neutral"}`}
+                aria-label="toggle confirmed-commit window"
+              >
+                {twoPhase ? "▣ 2-phase" : "□ 2-phase"}
+              </button>
               {(["merge", "override"] as const).map((m) => (
                 <button
                   key={m}
@@ -304,6 +364,35 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
           {mode === "override" && <span className="font-mono text-[10px] text-err">override replaces the ENTIRE config</span>}
         </div>
 
+        {pending && (
+          <div className="rounded-[0.25rem] border border-warn/50 bg-warn/5 p-3">
+            <div className="mb-2 flex items-center justify-between font-mono text-xs">
+              <span className="text-warn">
+                ◌ confirmed-commit window — {device.name} auto-reverts in{" "}
+                {String(Math.floor(pending.secs / 60)).padStart(2, "0")}:{String(pending.secs % 60).padStart(2, "0")}
+              </span>
+              <span className="text-dimmer-neutral">session {pending.id.slice(0, 8)}</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={confirmNow} className="rounded-[0.25rem] bg-ok/10 px-3 py-1 font-mono text-xs text-ok hover:bg-ok/20">
+                ✓ confirm commit
+              </button>
+              <button onClick={rollbackNow} className="rounded-[0.25rem] bg-err/10 px-3 py-1 font-mono text-xs text-err hover:bg-err/20">
+                ↩ rollback
+              </button>
+            </div>
+          </div>
+        )}
+        {needOverrideModal && (
+          <ConfirmModal
+            title="override replaces the ENTIRE configuration"
+            body={`You are about to REPLACE ${device.name}'s whole running config with the ${payload.split("\n").length} lines in the payload. Everything not present in it — interfaces, BGP, management — is removed. This is the nuclear option.`}
+            confirmLabel="push override"
+            danger
+            onConfirm={() => { setNeedOverrideModal(false); doPush(); }}
+            onCancel={() => setNeedOverrideModal(false)}
+          />
+        )}
         {result && (
           <div className={`rounded-[0.25rem] border p-3 ${result.ok ? "border-ok/40" : "border-err/40"}`}>
             <div className={`mb-1 font-mono text-xs ${result.ok ? "text-ok" : "text-err"}`}>
@@ -323,6 +412,7 @@ function History({ device, refreshKey }: { device: Device; refreshKey: number })
   const [diff, setDiff] = useState<{ changed_lines?: number; diff?: string } | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [restoreMsg, setRestoreMsg] = useState("");
+  const [needRestoreModal, setNeedRestoreModal] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -344,6 +434,7 @@ function History({ device, refreshKey }: { device: Device; refreshKey: number })
   }, [device.id, sha]);
 
   const restore = async () => {
+    setNeedRestoreModal(false);
     setRestoring(true);
     setRestoreMsg("");
     try {
@@ -387,7 +478,7 @@ function History({ device, refreshKey }: { device: Device; refreshKey: number })
                 {diff?.changed_lines ? `${diff.changed_lines} changed lines` : diff ? "in sync" : "…"}
               </span>
               <button
-                onClick={restore}
+                onClick={() => setNeedRestoreModal(true)}
                 disabled={restoring}
                 className="rounded-[0.25rem] bg-warn/10 px-3 py-1 font-mono text-xs text-warn hover:bg-warn/20 disabled:opacity-40"
                 title="push this backup back through the confirmed-commit + validation gate"
@@ -397,6 +488,16 @@ function History({ device, refreshKey }: { device: Device; refreshKey: number })
               {restoreMsg && <span className="font-mono text-[11px] text-accent-soft">{restoreMsg}</span>}
             </div>
             {diff?.diff !== undefined && <DiffView diff={diff.diff ?? ""} />}
+            {needRestoreModal && (
+              <ConfirmModal
+                title={`restore ${device.name} to ${sha}`}
+                body="The backup is pushed back with mode OVERRIDE (whole-config replace) inside a confirmed-commit window. Post-restore validation (config-match) runs automatically; a failed check rolls the device back to its current state."
+                confirmLabel="restore with override"
+                danger
+                onConfirm={restore}
+                onCancel={() => setNeedRestoreModal(false)}
+              />
+            )}
           </>
         )}
       </div>

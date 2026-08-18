@@ -61,4 +61,7 @@ export const api = {
   push: (body: Record<string, unknown>) => post<{ session_id: string; diff: string; confirmed: boolean }>("/api/config/push", body),
   labs: () => fetch("/api/labs").then((r) => j<Lab[]>(r)),
   applyLab: (name: string) => post<Record<string, unknown>>(`/api/labs/${name}/apply`),
+  sessionStatus: (id: string) => fetch(`/api/session/${id}`).then((r) => j<{ session_id: string; host: string; expires_in: number }>(r)),
+  sessionConfirm: (id: string) => post<{ session_id: string; action: string }>(`/api/session/${id}/confirm`),
+  sessionRollback: (id: string) => post<{ session_id: string; action: string; diff: string }>(`/api/session/${id}/rollback`),
 };

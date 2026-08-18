@@ -222,6 +222,35 @@ async def apply_lab(name: str) -> Any:
     return r.json()
 
 
+# ── held confirmed-commit sessions (§3: the two-phase safety window) ───
+
+
+@app.get("/api/session/{session_id}")
+async def session_status(session_id: str) -> Any:
+    """Status of a held session: host + seconds left in the window."""
+    return await _proxy(f"{CONNECTOR_URL}/session/{session_id}")
+
+
+@app.post("/api/session/{session_id}/confirm")
+async def session_confirm(session_id: str) -> Any:
+    """Finalise a confirmed commit (validation passed / human is sure)."""
+    async with httpx.AsyncClient(timeout=120) as client:
+        r = await client.post(f"{CONNECTOR_URL}/session/{session_id}/confirm")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.post("/api/session/{session_id}/rollback")
+async def session_rollback(session_id: str) -> Any:
+    """Roll a confirmed commit back to the previous config."""
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(f"{CONNECTOR_URL}/session/{session_id}/rollback")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
 @app.get("/api/devices/{device_id}/diff/{sha}")
 async def diff(device_id: int, sha: str) -> Any:
     """Unified diff: running vs the backup at sha (restore's endpoint)."""
