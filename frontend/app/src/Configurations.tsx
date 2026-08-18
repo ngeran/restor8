@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, type BackupEntry, type Device, type Template } from "./api";
 import { useToast } from "./toast";
 import { ConfirmModal, Skeleton } from "./ui";
+import { useResource } from "./resource";
 
 // The flagship: read the running config, edit via grouped template forms
 // (or raw set-format), preview the payload, push (merge or override),
@@ -10,16 +11,14 @@ import { ConfirmModal, Skeleton } from "./ui";
 type Tab = "running" | "editor" | "history";
 
 export default function Configurations() {
-  const [devices, setDevices] = useState<Device[]>([]);
   const [selected, setSelected] = useState<Device | null>(null);
   const [tab, setTab] = useState<Tab>("running");
 
+  const devicesQ = useResource("devices", api.devices);
+  const devices = devicesQ.data ?? [];
   useEffect(() => {
-    api.devices().then((ds) => {
-      setDevices(ds);
-      if (ds.length && !selected) setSelected(ds[0]);
-    }).catch(() => {});
-  }, []);
+    if (devices.length && !selected) setSelected(devices[0]);
+  }, [devices]);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const toast = useToast();

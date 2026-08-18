@@ -2,28 +2,22 @@ import { useEffect, useState } from "react";
 import { api, type Device, type Run, type Topology } from "./api";
 import { useEvents } from "./events";
 import { useToast } from "./toast";
+import { useResource } from "./resource";
 
 const statusColor = (s: string) =>
   s === "passed" ? "text-ok" : s === "failed" ? "text-err" : "text-warn";
 
 export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
-  const [devices, setDevices] = useState<Device[]>([]);
-  const [topo, setTopo] = useState<Topology | null>(null);
-  const [runs, setRuns] = useState<Run[]>([]);
   const [busy, setBusy] = useState(false);
   const { events, state } = useEvents();
   const toast = useToast();
 
-  const refresh = () => {
-    api.devices().then(setDevices).catch(() => {});
-    api.topology().then(setTopo).catch(() => {});
-    api.runs().then(setRuns).catch(() => {});
-  };
-  useEffect(refresh, []);
-  useEffect(() => {
-    const t = setInterval(refresh, 10000);
-    return () => clearInterval(t);
-  }, []);
+  const devicesQ = useResource("devices", api.devices, { pollMs: 10000 });
+  const topoQ = useResource("topology", api.topology, { pollMs: 30000 });
+  const runsQ = useResource("runs", api.runs, { pollMs: 10000 });
+  const devices = devicesQ.data ?? [];
+  const topo = topoQ.data ?? null;
+  const runs = runsQ.data ?? [];
 
   const run = async () => {
     setBusy(true);
