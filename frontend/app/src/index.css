@@ -1,17 +1,22 @@
 @import "tailwindcss";
 
-/* restor8 design tokens (spec §3 — mockup palette, Obsidian-Core family) */
+/* restor8 OLED theme — true black (pixels OFF, no burn-in), with the
+   accent load spread across channels (blue/orange/yellow/green) instead
+   of one hot color. Lumens stay low; glow is a signal, never decor. */
 @theme {
-  --color-base: #0a0e17;
-  --color-panel: #0f131c;
-  --color-card: #131a2b;
-  --color-edge: #1e2a45;
-  --color-accent: #00d4ff;
-  --color-accent-soft: #a8e8ff;
-  --color-secondary: #d2bbff;
-  --color-ok: #10b981;
-  --color-warn: #f59e0b;
-  --color-err: #ef4444;
+  --color-base: #000000;
+  --color-panel: #000000;
+  --color-card: #050505;
+  --color-edge: #16161c;
+  --color-accent: #59c2ff;       /* blue */
+  --color-accent-soft: #a8d8ff;
+  --color-secondary: #ffb454;    /* orange */
+  --color-ok: #7ce38b;           /* green */
+  --color-warn: #ffd173;         /* yellow */
+  --color-err: #ff6b6b;
+  --color-text: #b8c2cc;
+  --color-dim: #707a88;
+  --color-dimmer: #4a5261;
   --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
   --radius-card: 0.25rem;
@@ -19,11 +24,13 @@
 
 body {
   background: var(--color-base);
-  color: #cdd6f4;
+  color: var(--color-text);
   font-family: var(--font-sans);
 }
 
-/* glow = signal (live/active), not decoration */
-.glow-accent { box-shadow: 0 0 12px rgba(0, 212, 255, 0.35); }
-.glow-ok     { box-shadow: 0 0 12px rgba(16, 185, 129, 0.35); }
-.glow-err    { box-shadow: 0 0 12px rgba(239, 68, 68, 0.35); }
+.glow-accent { box-shadow: 0 0 10px rgba(89, 194, 255, 0.25); }
+.glow-ok     { box-shadow: 0 0 10px rgba(124, 227, 139, 0.25); }
+.glow-err    { box-shadow: 0 0 10px rgba(255, 107, 107, 0.25); }
+
+@utility text-dim-neutral { color: #707a88; }
+@utility text-dimmer-neutral { color: #4a5261; }

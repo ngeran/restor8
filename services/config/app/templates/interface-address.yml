@@ -1,0 +1,9 @@
+group: Interfaces
+name: interface-address
+description: Address an interface unit (family inet)
+mode: merge
+fields:
+  - { name: iface,    label: Interface,        type: text,   placeholder: eth2 }
+  - { name: unit,     label: Unit,             type: number, default: 0 }
+  - { name: address,  label: Address (prefix), type: text,   placeholder: 10.10.68.1/30 }
+  - { name: description, label: Description,   type: text,   placeholder: "p2p to p2" }

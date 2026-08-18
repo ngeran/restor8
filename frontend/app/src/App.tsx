@@ -3,8 +3,9 @@ import Dashboard from "./Dashboard";
 import Devices from "./Devices";
 import Configurations from "./Configurations";
 import Topology from "./Topology";
+import Labs from "./Labs";
 
-const TABS = ["dashboard", "devices", "configurations", "topology"] as const;
+const TABS = ["dashboard", "devices", "labs", "configurations", "topology"] as const;
 type Tab = (typeof TABS)[number];
 
 export default function App() {
@@ -24,7 +25,7 @@ export default function App() {
                 className={`rounded-[0.25rem] px-3 py-1 font-mono text-xs uppercase tracking-wider transition-colors ${
                   tab === t
                     ? "bg-card text-accent glow-accent"
-                    : "text-[#8b97b8] hover:text-accent-soft"
+                    : "text-[dim-neutral] hover:text-accent-soft"
                 }`}
               >
                 {t}
@@ -36,6 +37,7 @@ export default function App() {
       <main className="mx-auto max-w-6xl px-6 py-6">
         {tab === "dashboard" && <Dashboard onGoto={(t) => setTab(t as Tab)} />}
         {tab === "devices" && <Devices />}
+        {tab === "labs" && <Labs />}
         {tab === "configurations" && <Configurations />}
         {tab === "topology" && <Topology />}
       </main>

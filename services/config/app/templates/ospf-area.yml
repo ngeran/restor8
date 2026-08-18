@@ -1,0 +1,8 @@
+group: IGP
+name: ospf-area
+description: OSPF area + interface membership
+mode: merge
+fields:
+  - { name: area,    label: Area,     type: text, placeholder: 0.0.0.0 }
+  - { name: iface,   label: Interface, type: text, placeholder: eth2.0 }
+  - { name: p2p,     label: Point-to-point mode, type: bool, default: true }

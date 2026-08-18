@@ -1,0 +1,13 @@
+group: L3VPN
+name: l3vpn-base
+description: L3VPN instances on both PEs (assumes mpls-ldp-core applied)
+steps:
+  - roles: [P, PE, RR]
+    template: mpls-ldp
+    values: { ifaces: "eth1.0,eth2.0,eth3.0,eth4.0,eth5.0", lo: "lo0.0" }
+  - devices: [pe1]
+    template: l3vpn-instance
+    values: { name: CUST-A, rt: "65011:100", iface: eth3, cust_addr: 10.60.0.1/30 }
+  - devices: [pe2]
+    template: l3vpn-instance
+    values: { name: CUST-A, rt: "65012:100", iface: eth3, cust_addr: 10.60.1.1/30 }

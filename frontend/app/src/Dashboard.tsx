@@ -54,7 +54,7 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-[0.25rem] border border-edge bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-mono text-xs uppercase tracking-widest text-[#8b97b8]">
+            <h2 className="font-mono text-xs uppercase tracking-widest text-[dim-neutral]">
               scenario runs
             </h2>
             <button
@@ -69,16 +69,16 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
             {runs.slice(0, 8).map((r) => (
               <button
                 key={r.id}
-                onClick={() => onGoto("configurations")}
+                onClick={() => onGoto("labs")}
                 className="flex items-center justify-between rounded-[0.25rem] px-2 py-1 font-mono text-xs hover:bg-panel"
               >
-                <span className="text-[#8b97b8]">#{r.id} {r.scenario}</span>
+                <span className="text-[dim-neutral]">#{r.id} {r.scenario}</span>
                 <span className={statusColor(r.status)}>{r.status}</span>
               </button>
             ))}
             {runs.length === 0 && <Empty />}
           </div>
-          <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px] text-[#8b97b8]">
+          <div className="mt-3 flex flex-wrap gap-2 font-mono text-[10px] text-[dim-neutral]">
             {Object.entries(roles).map(([r, n]) => (
               <span key={r} className="rounded-[0.25rem] border border-edge px-2 py-0.5">
                 {r}×{n}
@@ -88,20 +88,20 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
         </section>
 
         <section className="rounded-[0.25rem] border border-edge bg-card p-4">
-          <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-[#8b97b8]">
+          <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-[dim-neutral]">
             live events {live && <span className="text-ok">●</span>}
           </h2>
           <div className="grid max-h-72 gap-0.5 overflow-y-auto font-mono text-[11px]">
             {[...events].reverse().slice(0, 40).map((e, i) => (
               <div key={i} className="flex gap-2">
-                <span className="shrink-0 text-[#5b6785]">
+                <span className="shrink-0 text-[dimmer-neutral]">
                   {new Date((e.ts ?? 0) * 1000).toLocaleTimeString()}
                 </span>
                 <span className="w-28 shrink-0 truncate text-secondary">
                   {e.device ?? `run#${e.run ?? "?"}`}
                 </span>
                 <span className="text-accent-soft">{e.stage ?? e.phase ?? ""}</span>
-                <span className="truncate text-[#8b97b8]">{e.message?.slice(0, 60)}</span>
+                <span className="truncate text-[dim-neutral]">{e.message?.slice(0, 60)}</span>
               </div>
             ))}
             {events.length === 0 && <Empty text="waiting for activity…" />}
@@ -117,12 +117,12 @@ function Card({
 }: { label: string; value: string; valueClass?: string; small?: boolean }) {
   return (
     <div className="rounded-[0.25rem] border border-edge bg-card p-4">
-      <div className="font-mono text-[10px] uppercase tracking-widest text-[#8b97b8]">{label}</div>
+      <div className="font-mono text-[10px] uppercase tracking-widest text-[dim-neutral]">{label}</div>
       <div className={`mt-1 font-mono ${small ? "text-sm" : "text-2xl"} ${valueClass}`}>{value}</div>
     </div>
   );
 }
 
 function Empty({ text = "no data" }: { text?: string }) {
-  return <div className="py-4 text-center font-mono text-xs text-[#5b6785]">{text}</div>;
+  return <div className="py-4 text-center font-mono text-xs text-[dimmer-neutral]">{text}</div>;
 }

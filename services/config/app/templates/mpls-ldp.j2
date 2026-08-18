@@ -1,0 +1,5 @@
+{% for i in ifaces.split(",") %}
+set protocols mpls interface {{ i.strip() }}
+set protocols ldp interface {{ i.strip() }}
+{% endfor %}
+set protocols ldp interface {{ lo }}

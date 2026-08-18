@@ -1,0 +1,69 @@
+# restor8-config Deployment. Stateless — templates baked into the image;
+# device I/O through connector.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restor8-config
+  namespace: restor8
+  labels:
+    app: restor8-config
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: restor8-config
+  template:
+    metadata:
+      labels:
+        app: restor8-config
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: restor8-config
+          image: localhost:5000/restor8-config:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: INVENTORY_URL
+              value: http://restor8-inventory:8080
+            - name: CONNECTOR_URL
+              value: http://restor8-connector:8080
+            - name: TOPOLOGY_URL
+              value: http://restor8-topology:8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            failureThreshold: 3
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

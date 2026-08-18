@@ -1,0 +1,6 @@
+set routing-instances {{ name }} instance-type vrf
+set routing-instances {{ name }} route-distinguisher {{ rt }}
+set routing-instances {{ name }} vrf-target target:{{ rt }}
+set routing-instances {{ name }} vrf-table-label
+set interfaces {{ iface }} unit 0 family inet address {{ cust_addr }}
+set routing-instances {{ name }} interface {{ iface }}.0

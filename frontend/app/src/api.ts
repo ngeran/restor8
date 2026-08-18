@@ -1,5 +1,5 @@
 // restor8 API layer — everything goes through the gateway (same origin
-// via Ingress in-cluster, via the vite dev proxy locally).
+// via the frontend nginx proxy / Ingress; vite dev proxy locally).
 
 export interface Device {
   id: number;
@@ -12,26 +12,9 @@ export interface Device {
   created_at: string;
 }
 
-export interface PlanNode {
-  name: string;
-  role: string;
-  asn: number;
-  loopback: string;
-}
-export interface PlanLink {
-  a: string;
-  a_if: string;
-  a_ip: string;
-  b: string;
-  b_if: string;
-  b_ip: string;
-}
-export interface Topology {
-  name: string;
-  underlay: string;
-  nodes: PlanNode[];
-  links: PlanLink[];
-}
+export interface PlanNode { name: string; role: string; asn: number; loopback: string }
+export interface PlanLink { a: string; a_if: string; a_ip: string; b: string; b_if: string; b_ip: string }
+export interface Topology { name: string; underlay: string; nodes: PlanNode[]; links: PlanLink[] }
 
 export interface Run {
   id: number;
@@ -42,26 +25,40 @@ export interface Run {
   detail: unknown;
 }
 
-export interface BackupEntry {
-  sha: string;
-  date: string;
-  message: string;
+export interface BackupEntry { sha: string; date: string; message: string }
+
+export interface TplField {
+  name: string; label: string; type: string;
+  default?: string | number | boolean; options?: string[]; placeholder?: string;
+}
+export interface Template {
+  group: string; name: string; description: string; mode: string; fields: TplField[];
+}
+export interface Lab {
+  group: string; name: string; description: string; steps: unknown[];
 }
 
 async function j<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`.slice(0, 200));
+  if (!res.ok) throw new Error(`${res.status}: ${(await res.text()).slice(0, 200)}`);
   return res.json();
 }
+const post = <T>(url: string, body?: unknown) =>
+  fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) }).then((r) => j<T>(r));
 
 export const api = {
   devices: () => fetch("/api/devices").then((r) => j<Device[]>(r)),
   topology: () => fetch("/api/topology").then((r) => j<Topology>(r)),
   runs: () => fetch("/api/runs").then((r) => j<Run[]>(r)),
   run: (id: number) => fetch(`/api/runs/${id}`).then((r) => j<Run>(r)),
-  backups: (id: number) =>
-    fetch(`/api/devices/${id}/backups`).then((r) => j<BackupEntry[]>(r)),
-  diff: (id: number, sha: string) =>
-    fetch(`/api/devices/${id}/diff/${sha}`).then((r) => j<Record<string, unknown>>(r)),
-  startRun: (name: string) =>
-    fetch(`/api/scenarios/${name}/run`, { method: "POST" }).then((r) => j<Record<string, unknown>>(r)),
+  backups: (id: number) => fetch(`/api/devices/${id}/backups`).then((r) => j<BackupEntry[]>(r)),
+  backupNow: (id: number) => post<BackupEntry>(`/api/devices/${id}/backup`),
+  restore: (id: number, sha: string) => post<Record<string, unknown>>(`/api/devices/${id}/restore/${sha}?approve=true`),
+  diff: (id: number, sha: string) => fetch(`/api/devices/${id}/diff/${sha}`).then((r) => j<Record<string, unknown>>(r)),
+  startRun: (name: string) => post<Record<string, unknown>>(`/api/scenarios/${name}/run`),
+  templates: () => fetch("/api/config/templates").then((r) => j<Template[]>(r)),
+  render: (name: string, values: Record<string, unknown>) => post<{ payload: string; mode: string }>(`/api/config/templates/${name}/render`, { values }),
+  running: (id: number, fmt = "set") => fetch(`/api/config/devices/${id}/running?fmt=${fmt}`).then((r) => j<{ device: string; fmt: string; config: string }>(r)),
+  push: (body: Record<string, unknown>) => post<{ session_id: string; diff: string; confirmed: boolean }>("/api/config/push", body),
+  labs: () => fetch("/api/labs").then((r) => j<Lab[]>(r)),
+  applyLab: (name: string) => post<Record<string, unknown>>(`/api/labs/${name}/apply`),
 };

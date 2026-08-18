@@ -15,13 +15,13 @@ export default function Devices() {
 
   return (
     <section className="rounded-[0.25rem] border border-edge bg-card">
-      <div className="border-b border-edge px-4 py-3 font-mono text-xs uppercase tracking-widest text-[#8b97b8]">
+      <div className="border-b border-edge px-4 py-3 font-mono text-xs uppercase tracking-widest text-[dim-neutral]">
         inventory — {devices.length} devices
       </div>
       {error && <div className="p-4 font-mono text-xs text-err">{error}</div>}
       <table className="w-full font-mono text-xs">
         <thead>
-          <tr className="border-b border-edge text-left text-[10px] uppercase tracking-wider text-[#8b97b8]">
+          <tr className="border-b border-edge text-left text-[10px] uppercase tracking-wider text-[dim-neutral]">
             {["name", "role", "platform", "mgmt address", "auth", "clab node"].map((h) => (
               <th key={h} className="px-4 py-2">{h}</th>
             ))}
@@ -33,15 +33,15 @@ export default function Devices() {
               <td className="px-4 py-2 text-accent-soft">{d.name}</td>
               <td className="px-4 py-2 text-secondary">{role(d)}</td>
               <td className="px-4 py-2">{d.platform}</td>
-              <td className="px-4 py-2 text-[#8b97b8]">{d.mgmt_ip}:{d.port}</td>
-              <td className="px-4 py-2 text-[#8b97b8]">{d.auth_ref}</td>
-              <td className="px-4 py-2 text-[#8b97b8]">{d.containerlab_node ?? "—"}</td>
+              <td className="px-4 py-2 text-[dim-neutral]">{d.mgmt_ip}:{d.port}</td>
+              <td className="px-4 py-2 text-[dim-neutral]">{d.auth_ref}</td>
+              <td className="px-4 py-2 text-[dim-neutral]">{d.containerlab_node ?? "—"}</td>
             </tr>
           ))}
         </tbody>
       </table>
       {devices.length === 0 && !error && (
-        <div className="p-4 text-center font-mono text-xs text-[#5b6785]">no devices registered</div>
+        <div className="p-4 text-center font-mono text-xs text-[dimmer-neutral]">no devices registered</div>
       )}
     </section>
   );

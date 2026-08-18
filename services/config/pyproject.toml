@@ -1,0 +1,16 @@
+# config — the "Configure" pillar: templated device config pushes (Phase 7+).
+# Jinja2 templates + form schemas are checked into the repo (code, reviewed
+# like code, baked into the image); rendering and pushing go through
+# connector like every other device-toucher. Never imports PyEZ.
+[project]
+name = "restor8-config"
+version = "0.1.0"
+description = "Template-driven device configuration: forms → render → preview → confirmed push"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "httpx",
+    "jinja2",
+    "pyyaml",
+]

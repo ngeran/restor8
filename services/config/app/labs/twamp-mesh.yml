@@ -1,0 +1,7 @@
+group: TWAMP
+name: twamp-mesh
+description: TWAMP light responders on every node (measurement targets)
+steps:
+  - roles: [P, PE, RR, CE]
+    template: twamp-light
+    values: { port: 862, allow_net: "10.0.0.0/8" }

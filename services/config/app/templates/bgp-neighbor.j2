@@ -1,0 +1,7 @@
+{% if export_direct %}
+set policy-options policy-statement EXPORT-DIRECT term 1 from protocol direct
+set policy-options policy-statement EXPORT-DIRECT term 1 then accept
+set protocols bgp group {{ group }} export EXPORT-DIRECT
+{% endif %}
+set protocols bgp group {{ group }} type external
+set protocols bgp group {{ group }} neighbor {{ neighbor }} peer-as {{ peer_as }}

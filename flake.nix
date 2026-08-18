@@ -53,6 +53,7 @@
         topology = ./services/topology/app;
         scenario = ./services/scenario/app;
         gateway = ./services/gateway/app;
+        config = ./services/config/app;
       };
 
       # Per-system: pkgs + the uv2nix python set shared by every service.

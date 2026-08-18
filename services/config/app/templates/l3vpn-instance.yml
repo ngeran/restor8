@@ -1,0 +1,9 @@
+group: L3VPN
+name: l3vpn-instance
+description: L3VPN routing instance on a PE (vrf, RT, vrf-table-label)
+mode: merge
+fields:
+  - { name: name,      label: Instance name,  type: text, placeholder: CUST-A }
+  - { name: rt,        label: Route target,   type: text, placeholder: "65011:100" }
+  - { name: iface,     label: Customer iface, type: text, placeholder: eth3.0 }
+  - { name: cust_addr, label: PE-side address, type: text, placeholder: 10.60.0.1/30 }

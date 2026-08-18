@@ -8,6 +8,8 @@ import { useEvents } from "./events";
 interface Pos { x: number; y: number }
 
 const ROLE_RADIUS: Record<string, number> = { P: 26, PE: 22, RR: 22, CE: 18 };
+// OLED-friendly: luminance spread across channels instead of one hot hue
+const ROLE_COLOR: Record<string, string> = { P: "#59c2ff", PE: "#7ce38b", RR: "#ffb454", CE: "#ffd173" };
 
 export default function Topology() {
   const [topo, setTopo] = useState<Topology | null>(null);
@@ -48,12 +50,12 @@ export default function Topology() {
   };
 
   if (!topo || !layout) {
-    return <div className="p-4 font-mono text-xs text-[#5b6785]">loading topology…</div>;
+    return <div className="p-4 font-mono text-xs text-[dimmer-neutral]">loading topology…</div>;
   }
 
   return (
     <section className="rounded-[0.25rem] border border-edge bg-card">
-      <div className="border-b border-edge px-4 py-3 font-mono text-xs uppercase tracking-widest text-[#8b97b8]">
+      <div className="border-b border-edge px-4 py-3 font-mono text-xs uppercase tracking-widest text-[dim-neutral]">
         {topo.name} — {topo.nodes.length} nodes / {topo.links.length} links ({topo.underlay})
       </div>
       <svg
@@ -78,7 +80,7 @@ export default function Topology() {
             <line
               key={i}
               x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke={hot ? "#00d4ff" : "#1e2a45"}
+              stroke={hot ? "#59c2ff" : "#16161c"}
               strokeWidth={hot ? 2 : 1.25}
               strokeDasharray={hot ? "6 4" : undefined}
               className="transition-all"
@@ -104,20 +106,20 @@ export default function Topology() {
               <circle
                 r={r}
                 fill="#131a2b"
-                stroke={active ? "#00d4ff" : n.role === "P" ? "#d2bbff" : "#1e2a45"}
+                stroke={active ? "#59c2ff" : ROLE_COLOR[n.role] ?? "#16161c"}
                 strokeWidth={active ? 2.5 : 1.5}
                 className={active ? "glow-accent" : undefined}
               />
               <text
                 textAnchor="middle" dy="0.35em"
-                className="fill-[#cdd6f4] font-mono"
+                className="fill-[#b8c2cc] font-mono"
                 fontSize={n.role === "P" ? 12 : 11}
               >
                 {n.name}
               </text>
               <text
                 textAnchor="middle" dy={r + 12}
-                className="fill-[#5b6785] font-mono" fontSize={9}
+                className="fill-[dimmer-neutral] font-mono" fontSize={9}
               >
                 {n.role} · as{n.asn}
               </text>

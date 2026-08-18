@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 [manifest]
 members = [
     "restor8-backup",
+    "restor8-config",
     "restor8-connector",
     "restor8-core",
     "restor8-gateway",
@@ -921,6 +922,27 @@ requires-dist = [
     { name = "fastapi" },
     { name = "gitpython" },
     { name = "httpx" },
+    { name = "uvicorn" },
+]
+
+[[package]]
+name = "restor8-config"
+version = "0.1.0"
+source = { virtual = "services/config" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "pyyaml" },
+    { name = "uvicorn" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "fastapi" },
+    { name = "httpx" },
+    { name = "jinja2" },
+    { name = "pyyaml" },
     { name = "uvicorn" },
 ]
 

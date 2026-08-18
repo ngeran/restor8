@@ -1,0 +1,7 @@
+group: TWAMP
+name: twamp-light
+description: TWAMP light responder (RPM measurement target)
+mode: merge
+fields:
+  - { name: port, label: UDP port, type: number, default: 862 }
+  - { name: allow_net, label: Allowed clients (prefix), type: text, default: "10.0.0.0/8" }

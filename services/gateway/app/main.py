@@ -184,6 +184,44 @@ async def backups(device_id: int) -> Any:
     return await _proxy(f"{BACKUP_URL}/backup/{device_id}/history")
 
 
+@app.post("/api/devices/{device_id}/backup")
+async def backup_now(device_id: int) -> Any:
+    """Run a backup right now (UI button)."""
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(f"{BACKUP_URL}/backup/{device_id}")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.post("/api/devices/{device_id}/restore/{sha}")
+async def restore_now(device_id: int, sha: str, approve: bool = False) -> Any:
+    """Restore a device to a backup (manual-approve gate enforced here too)."""
+    if not approve:
+        raise HTTPException(403, {"reason": "restore requires approval", "hint": "?approve=true"})
+    async with httpx.AsyncClient(timeout=600) as client:
+        r = await client.post(f"{RESTORE_URL}/restore/{device_id}/{sha}?approve=true")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.get("/api/labs")
+async def labs() -> Any:
+    """Lab catalogue (grouped by family)."""
+    return await _proxy(f"{CONFIG_URL}/labs")
+
+
+@app.post("/api/labs/{name}/apply")
+async def apply_lab(name: str) -> Any:
+    """Apply/restore a whole lab (sequential device pushes)."""
+    async with httpx.AsyncClient(timeout=900) as client:
+        r = await client.post(f"{CONFIG_URL}/labs/{name}/apply")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
 @app.get("/api/devices/{device_id}/diff/{sha}")
 async def diff(device_id: int, sha: str) -> Any:
     """Unified diff: running vs the backup at sha (restore's endpoint)."""
@@ -218,6 +256,47 @@ async def start_run(name: str) -> Any:
     """Start a scenario run from the UI (returns run id immediately)."""
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(f"{SCENARIO_URL}/scenario/{name}/run")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+# ── config editor (Configure pillar) ───────────────────────────────────
+
+CONFIG_URL = os.environ.get("CONFIG_URL", "http://restor8-config:8080")
+
+
+@app.get("/api/config/templates")
+async def config_templates() -> Any:
+    """Template catalogue with form schemas."""
+    return await _proxy(f"{CONFIG_URL}/templates")
+
+
+@app.post("/api/config/templates/{name}/render")
+async def config_render(name: str, body: dict[str, Any]) -> Any:
+    """Dry-run render (payload preview; nothing pushed).
+
+    ``body`` is the full request object (``{"values": {...}}``) passed
+    through verbatim to the config service.
+    """
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{CONFIG_URL}/templates/{name}/render", json=body)
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.get("/api/config/devices/{device_id}/running")
+async def config_running(device_id: int, fmt: str = "set") -> Any:
+    """Read a device's running config (set or text format)."""
+    return await _proxy(f"{CONFIG_URL}/devices/{device_id}/running?fmt={fmt}")
+
+
+@app.post("/api/config/push")
+async def config_push(body: dict[str, Any]) -> Any:
+    """Push a reviewed payload (long timeout: device commit on the wire)."""
+    async with httpx.AsyncClient(timeout=300) as client:
+        r = await client.post(f"{CONFIG_URL}/push", json=body)
     if r.status_code >= 400:
         raise HTTPException(r.status_code, r.json().get("detail"))
     return r.json()

@@ -1,0 +1,7 @@
+group: Routing
+name: static-route
+description: Static route (next-hop, discard, or reject)
+mode: merge
+fields:
+  - { name: destination, label: Destination prefix, type: text, placeholder: 192.0.2.0/24 }
+  - { name: action,      label: Action,             type: select, options: [discard, reject], default: discard }

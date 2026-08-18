@@ -1,0 +1,9 @@
+group: BGP
+name: bgp-neighbor
+description: Add an eBGP neighbor to a group (set-format)
+mode: merge
+fields:
+  - { name: group,    label: BGP group,        type: text,   default: FABRIC }
+  - { name: neighbor, label: Neighbor address, type: text,   placeholder: 10.10.0.2 }
+  - { name: peer_as,  label: Peer AS,          type: number, placeholder: "65002" }
+  - { name: export_direct, label: Export direct routes, type: bool, default: true }

@@ -1,0 +1,9 @@
+# A LAB = the full-fleet configuration for one exercise. Applying it is
+# idempotent (set-format convergence) — re-apply IS the restore.
+group: MPLS
+name: mpls-ldp-core
+description: MPLS + LDP across core/PE/RR — the base for TE and VPN labs
+steps:
+  - roles: [P, PE, RR]
+    template: mpls-ldp
+    values: { ifaces: "eth1.0,eth2.0,eth3.0,eth4.0,eth5.0", lo: "lo0.0" }

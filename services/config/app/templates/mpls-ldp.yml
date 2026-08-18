@@ -1,0 +1,7 @@
+group: MPLS
+name: mpls-ldp
+description: MPLS + LDP on interfaces and loopback
+mode: merge
+fields:
+  - { name: ifaces,  label: Interfaces (comma-separated), type: text, placeholder: "eth1.0,eth2.0" }
+  - { name: lo,      label: Loopback unit,                type: text, default: lo0.0 }

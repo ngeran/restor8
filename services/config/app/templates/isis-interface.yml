@@ -1,0 +1,7 @@
+group: IGP
+name: isis-interface
+description: Enable ISIS on an interface (level 2, p2p)
+mode: merge
+fields:
+  - { name: iface, label: Interface, type: text, placeholder: eth2.0 }
+  - { name: level, label: Level, type: select, options: ["level-1", "level-2"], default: level-2 }
