@@ -21,7 +21,7 @@ export type WsState =
 const BASE_DELAY = 1000;
 const MAX_DELAY = 15000;
 
-function backoffDelay(attempt: number): number {
+export function backoffDelay(attempt: number): number {
   const raw = Math.min(BASE_DELAY * 2 ** attempt, MAX_DELAY);
   const jitter = raw * (0.8 + Math.random() * 0.4); // ±20%
   return Math.round(jitter);

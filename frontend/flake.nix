@@ -48,7 +48,7 @@
             pname = "restor8-frontend";
             version = "0.1.0";
             src = ./app;
-            npmDepsHash = "sha256-YrZXjj6gUqbRhC3eZr0/QuH7ePurXZHRekU4xBLrerQ=";  # from app/package-lock.json via just relock
+            npmDepsHash = "sha256-PEaMayeWtq6dqOplapTlD5rtaYhnY4KK1y5M2Qi4p1M=";  # from app/package-lock.json via just relock
             dontNpmBuild = false;            # run `npm run build` (the default)
             installPhase = ''
               runHook preInstall

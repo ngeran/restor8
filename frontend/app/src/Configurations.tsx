@@ -9,6 +9,16 @@ import Stepper from "./Stepper";
 // (or raw set-format), preview the payload, push (merge or override),
 // and walk Git history with diffs + one-click gated restore.
 
+
+export function classifyDiffLine(line: string): "header" | "add" | "del" | "ctx" {
+  // MUST be separate startsWith calls — a parenthesized comma expression
+  // ("+++", "---", "@@") evaluates to only "@@" (the shipped bug).
+  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")) return "header";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "del";
+  return "ctx";
+}
+
 type Tab = "running" | "editor" | "history";
 
 export default function Configurations({ initialDevice }: { initialDevice?: string | null }) {
@@ -520,10 +530,10 @@ function DiffView({ diff }: { diff: string }) {
   return (
     <div className="max-h-[46vh] overflow-auto rounded-[0.25rem] bg-black font-mono text-[11px] leading-5">
       {lines.map((line, i) => {
-        const cls = line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")
-          ? "text-secondary"
-          : line.startsWith("+") ? "text-ok bg-ok/10" : line.startsWith("-") ? "text-err bg-err/10" : "text-dim-neutral";
-        const countable = !line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@");
+        const kind = classifyDiffLine(line);
+        const cls = kind === "header" ? "text-secondary"
+          : kind === "add" ? "text-ok bg-ok/10" : kind === "del" ? "text-err bg-err/10" : "text-dim-neutral";
+        const countable = classifyDiffLine(line) !== "header";
         if (countable) n += 1;
         return (
           <div key={i} className={`flex ${cls}`}>

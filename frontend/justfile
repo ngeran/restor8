@@ -96,6 +96,7 @@ check:
     cd app
     [ -d node_modules ] || { echo "run \`npm install\` first"; exit 1; }
     npx tsc --noEmit
+    npx vitest run
     npx eslint src 2>/dev/null || echo "  eslint: advisory (configure .eslintrc as needed)"
 
 # After changing deps + `npm install` in app/, recompute npmDepsHash and write
