@@ -11,12 +11,16 @@ const ROLE_RADIUS: Record<string, number> = { P: 26, PE: 22, RR: 22, CE: 18 };
 // OLED-friendly: luminance spread across channels instead of one hot hue
 const ROLE_COLOR: Record<string, string> = { P: "#59c2ff", PE: "#7ce38b", RR: "#ffb454", CE: "#ffd173" };
 
-export default function Topology() {
+export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: string) => void }) {
   const [topo, setTopo] = useState<Topology | null>(null);
   const { events } = useEvents();
   const [pos, setPos] = useState<Record<string, Pos>>({});
   const drag = useRef<{ name: string; dx: number; dy: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // §7 zoom/pan: view transform + background-drag panning
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const pan = useRef<{ x: number; y: number } | null>(null);
+  const [hoverLink, setHoverLink] = useState<number | null>(null);
 
   useEffect(() => {
     api.topology().then(setTopo).catch(() => {});
@@ -80,15 +84,31 @@ export default function Topology() {
         ref={svgRef}
         viewBox="0 0 900 520"
         className="h-[520px] w-full touch-none select-none"
-        onPointerMove={(e) => {
-          if (!drag.current || !svgRef.current) return;
-          const { x, y } = pt(svgRef.current, e);
-          const { name, dx, dy } = drag.current;
-          setPos((p) => ({ ...p, [name]: { x: x - dx, y: y - dy } }));
+        onWheel={(e) => {
+          e.preventDefault();
+          const factor = e.deltaY < 0 ? 1.1 : 0.9;
+          setView((v) => ({ ...v, k: Math.min(3, Math.max(0.4, v.k * factor)) }));
         }}
-        onPointerUp={() => (drag.current = null)}
-        onPointerLeave={() => (drag.current = null)}
+        onPointerDown={(e) => {
+          if (drag.current) return;
+          pan.current = { x: e.clientX, y: e.clientY };
+        }}
+        onPointerMove={(e) => {
+          if (drag.current && svgRef.current) {
+            const { x, y } = pt(svgRef.current, e);
+            const { name, dx, dy } = drag.current;
+            setPos((p) => ({ ...p, [name]: { x: x - dx, y: y - dy } }));
+          } else if (pan.current) {
+            const dx = e.clientX - pan.current.x;
+            const dy = e.clientY - pan.current.y;
+            pan.current = { x: e.clientX, y: e.clientY };
+            setView((v) => ({ ...v, x: v.x + dx / v.k, y: v.y + dy / v.k }));
+          }
+        }}
+        onPointerUp={() => { drag.current = null; pan.current = null; }}
+        onPointerLeave={() => { drag.current = null; pan.current = null; }}
       >
+        <g transform={`translate(${-view.x} ${-view.y}) scale(${view.k}) translate(${view.x} ${view.y})`}>
         {topo.links.map((l, i) => {
           const a = pos[l.a], b = pos[l.b];
           if (!a || !b) return null;
@@ -98,11 +118,15 @@ export default function Topology() {
             <line
               key={i}
               x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-              stroke={hot ? "#59c2ff" : "#16161c"}
-              strokeWidth={hot ? 2 : 1.25}
+              stroke={hot ? "#59c2ff" : hoverLink === i ? "#ffb454" : "#16161c"}
+              strokeWidth={hot || hoverLink === i ? 2 : 1.25}
               strokeDasharray={hot ? "6 4" : undefined}
-              className="transition-all"
-            />
+              className="cursor-help transition-all"
+              onPointerEnter={() => setHoverLink(i)}
+              onPointerLeave={() => setHoverLink(null)}
+            >
+              <title>{`${l.a} ${l.a_if} (${l.a_ip}) ↔ ${l.b} ${l.b_if} (${l.b_ip})`}</title>
+            </line>
           );
         })}
         {topo.nodes.map((n) => {
@@ -120,6 +144,8 @@ export default function Topology() {
                 const m = pt(svgRef.current, e);
                 drag.current = { name: n.name, dx: m.x - p.x, dy: m.y - p.y };
               }}
+              onClick={(e) => { if (Math.abs(drag.current?.dx ?? 0) < 2) onSelectDevice?.(n.name); }}
+              style={{ cursor: "grab" }}
             >
               <circle
                 r={r}
@@ -144,7 +170,17 @@ export default function Topology() {
             </g>
           );
         })}
+        </g>
       </svg>
+      <div className="flex flex-wrap items-center gap-3 border-t border-edge px-4 py-2 font-mono text-[10px] text-dim-neutral">
+        {Object.entries(ROLE_COLOR).map(([role, color]) => (
+          <span key={role} className="flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ background: color }} />
+            {role}
+          </span>
+        ))}
+        <span className="ml-auto">scroll = zoom · drag bg = pan · drag node = move · hover link = addresses</span>
+      </div>
     </section>
   );
 }

@@ -3,6 +3,7 @@ import { api, type BackupEntry, type Device, type Template } from "./api";
 import { useToast } from "./toast";
 import { ConfirmModal, Skeleton } from "./ui";
 import { useResource } from "./resource";
+import Stepper from "./Stepper";
 
 // The flagship: read the running config, edit via grouped template forms
 // (or raw set-format), preview the payload, push (merge or override),
@@ -10,15 +11,17 @@ import { useResource } from "./resource";
 
 type Tab = "running" | "editor" | "history";
 
-export default function Configurations() {
+export default function Configurations({ initialDevice }: { initialDevice?: string | null }) {
   const [selected, setSelected] = useState<Device | null>(null);
   const [tab, setTab] = useState<Tab>("running");
 
   const devicesQ = useResource("devices", api.devices);
   const devices = devicesQ.data ?? [];
   useEffect(() => {
-    if (devices.length && !selected) setSelected(devices[0]);
-  }, [devices]);
+    if (!devices.length) return;
+    const want = initialDevice && devices.find((d) => d.name === initialDevice);
+    if (!selected || (initialDevice && selected.name !== initialDevice)) setSelected(want ?? devices[0]);
+  }, [devices, initialDevice]);
 
   const [refreshKey, setRefreshKey] = useState(0);
   const toast = useToast();
@@ -143,6 +146,7 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
   // device's 5-minute window; the human confirms or rolls back below.
   const [twoPhase, setTwoPhase] = useState(true);
   const [pending, setPending] = useState<{ id: string; secs: number } | null>(null);
+  const [lastSessionId, setLastSessionId] = useState<string>("");
   const [needOverrideModal, setNeedOverrideModal] = useState(false);
 
   useEffect(() => {
@@ -202,6 +206,7 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
         comment: `restor8-ui editor (${tplName === "__raw" ? "raw" : tplName})`,
         confirm_now: !twoPhase,
       });
+      setLastSessionId(r.session_id);
       if (r.confirmed) {
         setResult({ ok: true, text: "committed", diff: r.diff });
         toast.ok(`push to ${device.name}: committed`);
@@ -391,6 +396,11 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
             onConfirm={() => { setNeedOverrideModal(false); doPush(); }}
             onCancel={() => setNeedOverrideModal(false)}
           />
+        )}
+        {lastSessionId && (
+          <div className="rounded-[0.25rem] border border-edge bg-black p-2">
+            <Stepper sessionId={lastSessionId} />
+          </div>
         )}
         {result && (
           <div className={`rounded-[0.25rem] border p-3 ${result.ok ? "border-ok/40" : "border-err/40"}`}>
