@@ -85,26 +85,20 @@ actually needs something the shape doesn't support.
 
 ## Design system (frontend)
 
+**Source of truth: `frontend/app/src/index.css` — see [DESIGN.md](../../../DESIGN.md) for the full palette and rationale.** Summary:
+
 | Token | Value |
 |---|---|
-| Background | `#0a0e17` / `#0f131c` |
-| Card surface | `#131A2B` |
-| Border | `#1E2A45` |
-| Primary accent | `#00d4ff` (glow: `rgba(0,212,255,0.2–0.4)`) |
-| Secondary accent | `#d2bbff` |
-| Success / Warning / Error | `#10B981` / `#F59E0B` / `#EF4444` |
-| Font — mono (IPs, hashes, protocol data) | JetBrains Mono |
-| Font — prose/headings | Inter |
-| Radius | `0.25rem` default, sharp not rounded |
+| Background | `#000000` (OLED true black; panels black, cards `#050505`) |
+| Border | `#16161c` |
+| Primary accent | `#59c2ff` (blue) |
+| Secondary accent | `#ffb454` (orange) |
+| Success / Warning / Error | `#7ce38b` / `#ffd173` / `#ff6b6b` |
+| Fonts | JetBrains Mono (data) / Inter (prose) |
+| Radius | `0.25rem`, sharp |
 
-This is the same accent family as Obsidian Core's teal (`#00dce5`) —
-match the feel, don't chase an exact hex. Glow effects signal
-live/active/selected state; don't apply them decoratively everywhere.
-
-The config-diff screen (unified diff, commit sidebar, revert) and the
-topology canvas (draggable SVG nodes, animated links for degraded state)
-are the two heaviest screens — build and wire them against real backend
-data, not fixtures.
+Accent load is spread across channels (blue/orange/yellow/green) on true
+black — OLED burn-in friendly; glow marks live/active state only.
 
 ## Build order
 

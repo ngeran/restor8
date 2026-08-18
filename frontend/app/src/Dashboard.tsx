@@ -10,7 +10,7 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
   const [topo, setTopo] = useState<Topology | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [busy, setBusy] = useState(false);
-  const { events, live } = useEvents();
+  const { events, state } = useEvents();
 
   const refresh = () => {
     api.devices().then(setDevices).catch(() => {});
@@ -89,7 +89,7 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
 
         <section className="rounded-[0.25rem] border border-edge bg-card p-4">
           <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-[dim-neutral]">
-            live events {live && <span className="text-ok">●</span>}
+            live events {state.kind === "live" ? <span className="text-ok">●</span> : <span className="text-warn">◌ {state.inSecs}s</span>}
           </h2>
           <div className="grid max-h-72 gap-0.5 overflow-y-auto font-mono text-[11px]">
             {[...events].reverse().slice(0, 40).map((e, i) => (

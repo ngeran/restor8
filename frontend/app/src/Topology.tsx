@@ -22,9 +22,20 @@ export default function Topology() {
     api.topology().then(setTopo).catch(() => {});
   }, []);
 
-  // initial layout: ring, P-core inner, others outer
+  // layout: seeded ring (P-core inner, others outer) and PERSISTED to
+  // localStorage per topology name — dragged positions survive tab
+  // switches and reloads (§1 fix; backend-stored layout is a stretch goal)
+  const storageKey = topo ? `restor8.layout.${topo.name}` : "";
   const layout = useMemo(() => {
-    if (!topo || Object.keys(pos).length) return null;
+    if (!topo) return null;
+    let saved: Record<string, Pos> | null = null;
+    try {
+      saved = JSON.parse(localStorage.getItem(storageKey) ?? "null");
+    } catch { saved = null; }
+    if (saved && Object.keys(saved).length) {
+      setPos(saved);
+      return saved;
+    }
     const core = topo.nodes.filter((n) => n.role === "P");
     const edge = topo.nodes.filter((n) => n.role !== "P");
     const p: Record<string, Pos> = {};
@@ -38,7 +49,14 @@ export default function Topology() {
     });
     setPos(p);
     return p;
-  }, [topo]);
+  }, [topo, storageKey]);
+
+  // save (debounced by React's commit) whenever positions change
+  useEffect(() => {
+    if (storageKey && Object.keys(pos).length) {
+      localStorage.setItem(storageKey, JSON.stringify(pos));
+    }
+  }, [pos, storageKey]);
 
   const lastSeen: Record<string, number> = {};
   for (const e of events) if (e.device) lastSeen[e.device.split(".")[0]] = e.ts ?? 0;

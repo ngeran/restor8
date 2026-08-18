@@ -90,12 +90,16 @@ function Running({ device, refreshKey }: { device: Device; refreshKey: number })
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    // request-id guard: a fast device switch must not let a stale reply
+    // overwrite the new device's config
+    let live = true;
     setLoading(true);
     setError("");
     api.running(device.id, fmt)
-      .then((r) => setConfig(r.config))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
+      .then((r) => { if (live) setConfig(r.config); })
+      .catch((e) => { if (live) setError(String(e)); })
+      .finally(() => { if (live) setLoading(false); });
+    return () => { live = false; };
   }, [device.id, fmt, refreshKey]);
 
   return (
@@ -312,16 +316,22 @@ function History({ device, refreshKey }: { device: Device; refreshKey: number })
   const [restoreMsg, setRestoreMsg] = useState("");
 
   useEffect(() => {
+    let live = true;
     setSha("");
     setDiff(null);
     setRestoreMsg("");
-    api.backups(device.id).then(setHistory).catch(() => {});
+    api.backups(device.id).then((h) => { if (live) setHistory(h); }).catch(() => {});
+    return () => { live = false; };
   }, [device.id, refreshKey]);
 
   useEffect(() => {
+    let live = true;
     if (!sha) return;
     setDiff(null);
-    api.diff(device.id, sha).then(setDiff).catch(() => setDiff({}));
+    api.diff(device.id, sha)
+      .then((d) => { if (live) setDiff(d); })
+      .catch(() => { if (live) setDiff({}); });
+    return () => { live = false; };
   }, [device.id, sha]);
 
   const restore = async () => {
@@ -388,10 +398,10 @@ function DiffView({ diff }: { diff: string }) {
   return (
     <div className="max-h-[46vh] overflow-auto rounded-[0.25rem] bg-black font-mono text-[11px] leading-5">
       {lines.map((line, i) => {
-        const cls = line.startsWith(("+++", "---", "@@"))
+        const cls = line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@")
           ? "text-secondary"
           : line.startsWith("+") ? "text-ok bg-ok/10" : line.startsWith("-") ? "text-err bg-err/10" : "text-dim-neutral";
-        const countable = !line.startsWith(("+++", "---", "@@"));
+        const countable = !line.startsWith("+++") || line.startsWith("---") || line.startsWith("@@");
         if (countable) n += 1;
         return (
           <div key={i} className={`flex ${cls}`}>

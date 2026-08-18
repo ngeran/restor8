@@ -11,7 +11,7 @@ export default function Labs() {
   const [labs, setLabs] = useState<Lab[]>([]);
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<{ lab: string; applied: number; failed: number; nodes: NodeRes[] } | null>(null);
-  const { events, live } = useEvents();
+  const { events, state } = useEvents();
 
   useEffect(() => {
     api.labs().then(setLabs).catch(() => {});
@@ -84,7 +84,7 @@ export default function Labs() {
 
       <section className="rounded-[0.25rem] border border-edge bg-card p-4">
         <h2 className="mb-3 font-mono text-xs uppercase tracking-widest text-dim-neutral">
-          live events {live && <span className="text-ok">●</span>}
+          live events {state.kind === "live" ? <span className="text-ok">●</span> : <span className="text-warn">◌ {state.inSecs}s</span>}
         </h2>
         <div className="grid max-h-[70vh] gap-0.5 overflow-y-auto font-mono text-[11px]">
           {[...events].reverse().slice(0, 60).map((e, i) => (

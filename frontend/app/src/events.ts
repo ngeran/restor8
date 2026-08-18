@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 
-// The live feed: gateway WS with optional filters. Reconnects with backoff;
-// the bus is in-memory so a dropped run is re-readable via REST anyway.
+// The live feed: gateway WS with optional filters. Reconnects with
+// exponential backoff + jitter (1s→2s→4s→8s, capped at 15s, ±20%) and
+// exposes the reconnect state so the UI can say WHY it's quiet.
 export interface LiveEvent {
   session_id?: string;
   device?: string;
@@ -13,9 +14,22 @@ export interface LiveEvent {
   ts?: number;
 }
 
+export type WsState =
+  | { kind: "live" }
+  | { kind: "reconnecting"; inSecs: number; attempt: number };
+
+const BASE_DELAY = 1000;
+const MAX_DELAY = 15000;
+
+function backoffDelay(attempt: number): number {
+  const raw = Math.min(BASE_DELAY * 2 ** attempt, MAX_DELAY);
+  const jitter = raw * (0.8 + Math.random() * 0.4); // ±20%
+  return Math.round(jitter);
+}
+
 export function useEvents(filters?: Record<string, string>) {
   const [events, setEvents] = useState<LiveEvent[]>([]);
-  const [live, setLive] = useState(false);
+  const [state, setState] = useState<WsState>({ kind: "live" });
   const filtersKey = JSON.stringify(filters ?? {});
   const wsRef = useRef<WebSocket | null>(null);
 
@@ -23,15 +37,40 @@ export function useEvents(filters?: Record<string, string>) {
     const qs = filters ? new URLSearchParams(filters).toString() : "";
     const proto = location.protocol === "https:" ? "wss" : "ws";
     let closed = false;
-    let timer: number;
+    let timer: number | undefined;
+    let attempt = 0;
+
+    const scheduleReconnect = () => {
+      const delay = backoffDelay(attempt);
+      attempt += 1;
+      setState({ kind: "reconnecting", inSecs: Math.round(delay / 1000), attempt });
+      timer = window.setTimeout(connect, delay);
+    };
+    const tick = () => {
+      // keep the "in Ns" countdown honest while we wait
+      timer = window.setTimeout(() => {
+        setState((s) =>
+          s.kind === "reconnecting" && s.inSecs > 1
+            ? { ...s, inSecs: s.inSecs - 1 }
+            : s,
+        );
+        if (!closed) tick();
+      }, 1000);
+    };
 
     const connect = () => {
       const ws = new WebSocket(`${proto}://${location.host}/ws${qs ? `?${qs}` : ""}`);
       wsRef.current = ws;
-      ws.onopen = () => setLive(true);
+      ws.onopen = () => {
+        attempt = 0;
+        setState({ kind: "live" });
+        if (timer) clearTimeout(timer);
+      };
       ws.onclose = () => {
-        setLive(false);
-        if (!closed) timer = window.setTimeout(connect, 2000);
+        if (!closed) {
+          scheduleReconnect();
+          tick();
+        }
       };
       ws.onmessage = (m) => {
         try {
@@ -46,10 +85,10 @@ export function useEvents(filters?: Record<string, string>) {
     connect();
     return () => {
       closed = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       wsRef.current?.close();
     };
   }, [filtersKey]);
 
-  return { events, live };
+  return { events, state };
 }

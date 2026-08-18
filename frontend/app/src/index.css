@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* restor8 OLED theme — true black (pixels OFF, no burn-in), with the
+/* restor8 OLED theme — tokens documented in DESIGN.md; THIS FILE IS THE SOURCE OF TRUTH — true black (pixels OFF, no burn-in), with the
    accent load spread across channels (blue/orange/yellow/green) instead
    of one hot color. Lumens stay low; glow is a signal, never decor. */
 @theme {
@@ -34,3 +34,9 @@ body {
 
 @utility text-dim-neutral { color: #707a88; }
 @utility text-dimmer-neutral { color: #4a5261; }
+
+/* visible focus on true black (default outlines vanish) */
+:focus-visible {
+  outline: 1px solid rgba(89, 194, 255, 0.6);
+  outline-offset: 1px;
+}
