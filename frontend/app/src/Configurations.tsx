@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type BackupEntry, type Device, type Template } from "./api";
+import { useToast } from "./toast";
+import { Skeleton } from "./ui";
 
 // The flagship: read the running config, edit via grouped template forms
 // (or raw set-format), preview the payload, push (merge or override),
@@ -20,6 +22,7 @@ export default function Configurations() {
   }, []);
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const toast = useToast();
 
   return (
     <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
@@ -30,7 +33,11 @@ export default function Configurations() {
             {selected && (
               <button
                 onClick={async () => {
-                  try { await api.backupNow(selected.id); setRefreshKey((k) => k + 1); } catch { /* surfaced in tabs */ }
+                  try {
+                    const r = await api.backupNow(selected.id);
+                    toast.ok(`backup: ${r.commit ?? "no change"}`, r.changed ? "new commit in history" : "config unchanged — no commit");
+                    setRefreshKey((k) => k + 1);
+                  } catch (e) { toast.fromError(`backup of ${selected.name} failed`, e); }
                 }}
                 className="font-mono text-[10px] text-ok hover:glow-ok"
                 title="backup running config → git"
@@ -117,7 +124,7 @@ function Running({ device, refreshKey }: { device: Device; refreshKey: number })
         <span className="ml-auto font-mono text-[10px] text-dimmer-neutral">{config.split("\n").length} lines · live from device</span>
       </div>
       {error && <div className="p-4 font-mono text-xs text-err">{error}</div>}
-      {loading && <div className="p-4 font-mono text-xs text-dimmer-neutral">reading {device.name}…</div>}
+      {loading && <Skeleton lines={8} />}
       {!loading && !error && (
         <pre className="max-h-[70vh] overflow-auto px-4 py-3 font-mono text-[11px] leading-5 whitespace-pre-wrap break-all">{config}</pre>
       )}
@@ -181,9 +188,11 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
         confirm_now: true,
       });
       setResult({ ok: true, text: r.confirmed ? "committed" : "pending confirmation window", diff: r.diff });
+      toast.ok(`push to ${device.name}: ${r.confirmed ? "committed" : "awaiting confirmation"}`);
       onPushed();
     } catch (e) {
-      setResult({ ok: false, text: String(e), diff: "" });
+      setResult({ ok: false, text: "", diff: "" });
+      toast.fromError(`push to ${device.name} failed`, e);
     } finally {
       setBusy(false);
     }
@@ -343,8 +352,11 @@ function History({ device, refreshKey }: { device: Device; refreshKey: number })
       setRestoreMsg(
         r.restored ? `restored ✓ (${v?.check}: passed)` : `rolled back — validation: ${JSON.stringify(v?.check)}`,
       );
+      if (r.restored) toast.ok(`${device.name} restored`, `validation: ${v?.check} passed`);
+      else toast.warn(`${device.name} rolled back`, "post-restore validation failed — device returned to known-good");
     } catch (e) {
-      setRestoreMsg(String(e));
+      setRestoreMsg("");
+      toast.fromError(`restore of ${device.name} failed`, e);
     } finally {
       setRestoring(false);
     }

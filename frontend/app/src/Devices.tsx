@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
 import { api, type Device, type Topology } from "./api";
+import { useToast } from "./toast";
+import { Retry, Skeleton } from "./ui";
 
 export default function Devices() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [topo, setTopo] = useState<Topology | null>(null);
   const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+  const toast = useToast();
 
   useEffect(() => {
-    api.devices().then(setDevices).catch((e) => setError(String(e)));
-    api.topology().then(setTopo).catch(() => {});
-  }, []);
+    let live = true;
+    setError("");
+    api.devices()
+      .then((d) => { if (live) setDevices(d); })
+      .catch((e) => { if (live) { setError("load failed"); toast.fromError("devices failed to load", e); } });
+    api.topology().then((t) => { if (live) setTopo(t); }).catch(() => {});
+    return () => { live = false; };
+  }, [tick]);
 
   const role = (d: Device) => topo?.nodes.find((n) => n.name === d.name)?.role ?? "—";
 
@@ -18,7 +27,8 @@ export default function Devices() {
       <div className="border-b border-edge px-4 py-3 font-mono text-xs uppercase tracking-widest text-[dim-neutral]">
         inventory — {devices.length} devices
       </div>
-      {error && <div className="p-4 font-mono text-xs text-err">{error}</div>}
+      {error && <Retry onRetry={() => setTick((t) => t + 1)} note="devices failed to load" />}
+      {!error && devices.length === 0 && <Skeleton lines={6} />}
       <table className="w-full font-mono text-xs">
         <thead>
           <tr className="border-b border-edge text-left text-[10px] uppercase tracking-wider text-[dim-neutral]">

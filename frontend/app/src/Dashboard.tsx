@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type Device, type Run, type Topology } from "./api";
 import { useEvents } from "./events";
+import { useToast } from "./toast";
 
 const statusColor = (s: string) =>
   s === "passed" ? "text-ok" : s === "failed" ? "text-err" : "text-warn";
@@ -11,6 +12,7 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
   const [runs, setRuns] = useState<Run[]>([]);
   const [busy, setBusy] = useState(false);
   const { events, state } = useEvents();
+  const toast = useToast();
 
   const refresh = () => {
     api.devices().then(setDevices).catch(() => {});
@@ -26,7 +28,10 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
   const run = async () => {
     setBusy(true);
     try {
-      await api.startRun("bgp-fabric");
+      const r = await api.startRun("bgp-fabric") as Record<string, unknown>;
+      toast.ok(`scenario run #${r.run} started`, "watch the live feed below");
+    } catch (e) {
+      toast.fromError("scenario failed to start", e);
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type Lab } from "./api";
 import { useEvents } from "./events";
+import { useToast } from "./toast";
+import { Skeleton } from "./ui";
 
 // Lab = the full-fleet configuration for one exercise, grouped by family
 // (MPLS, L3VPN, TWAMP…). Applying is idempotent — re-apply IS the restore.
@@ -12,18 +14,27 @@ export default function Labs() {
   const [busy, setBusy] = useState("");
   const [result, setResult] = useState<{ lab: string; applied: number; failed: number; nodes: NodeRes[] } | null>(null);
   const { events, state } = useEvents();
+  const toast = useToast();
 
+  const [loadTick, setLoadTick] = useState(0);
   useEffect(() => {
-    api.labs().then(setLabs).catch(() => {});
-  }, []);
+    let live = true;
+    api.labs()
+      .then((l) => { if (live) setLabs(l); })
+      .catch((e) => { if (live) toast.fromError("labs failed to load", e); });
+    return () => { live = false; };
+  }, [loadTick]);
 
   const apply = async (name: string) => {
     setBusy(name);
     setResult(null);
     try {
-      setResult(await api.applyLab(name) as never);
+      const r = await api.applyLab(name) as { lab: string; applied: number; failed: number };
+      setResult(r as never);
+      if (r.failed) toast.warn(`${name}: ${r.failed} node(s) failed`, "see per-node results");
+      else toast.ok(`${name} applied`, `${r.applied} nodes`);
     } catch (e) {
-      setResult({ lab: name, applied: 0, failed: 1, nodes: [{ device: "-", ok: false, diff_lines: 0, error: String(e) }] });
+      toast.fromError(`lab ${name} failed to apply`, e);
     } finally {
       setBusy("");
     }
@@ -59,9 +70,7 @@ export default function Labs() {
             ))}
           </section>
         ))}
-        {labs.length === 0 && (
-          <div className="rounded-[0.25rem] border border-edge bg-card p-4 font-mono text-xs text-dimmer-neutral">no labs defined</div>
-        )}
+        {labs.length === 0 && <Skeleton lines={5} />}
 
         {result && (
           <section className="rounded-[0.25rem] border border-edge bg-card p-4">
