@@ -58,7 +58,7 @@ export default function App() {
       </header>
       <main className="mx-auto max-w-6xl px-6 py-6">
         {tab === "dashboard" && <Dashboard onGoto={(t) => setTab(t as Tab)} />}
-        {tab === "devices" && <Devices />}
+        {tab === "devices" && <Devices onSelectDevice={(name) => { setFocusDevice(name); setTab("configurations"); }} />}
         {tab === "labs" && <Labs />}
         {tab === "configurations" && <Configurations initialDevice={focusDevice} />}
         {tab === "topology" && <Topology onSelectDevice={(name) => { setFocusDevice(name); setTab("configurations"); }} />}

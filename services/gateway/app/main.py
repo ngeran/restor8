@@ -172,6 +172,35 @@ async def devices() -> Any:
     return await _proxy(f"{INVENTORY_URL}/devices")
 
 
+@app.post("/api/devices")
+async def create_device(body: dict[str, Any]) -> Any:
+    """Register a device (UI form)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{INVENTORY_URL}/devices", json=body)
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.patch("/api/devices/{device_id}")
+async def update_device(device_id: int, body: dict[str, Any]) -> Any:
+    """Patch a device (UI form)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.patch(f"{INVENTORY_URL}/devices/{device_id}", json=body)
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.delete("/api/devices/{device_id}", status_code=204)
+async def delete_device(device_id: int) -> None:
+    """Remove a device (UI form)."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.delete(f"{INVENTORY_URL}/devices/{device_id}")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+
+
 @app.get("/api/topology")
 async def topology() -> Any:
     """The topology plan (nodes + links)."""
