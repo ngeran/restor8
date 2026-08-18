@@ -27,10 +27,11 @@ const Ctx = createContext<ToastApi | null>(null);
 export function describeError(e: unknown): string {
   const raw = e instanceof Error ? e.message : String(e);
   // gateway passes backend details through as "NNN: {json}" — unpack
-  const m = raw.match(/\d{3}: (.*)/s);
+  const m = raw.match(/\d{3}: ([\s\S]*)/);
   let payload: Record<string, unknown> = {};
   try {
-    payload = JSON.parse((m ? m[1] : "").startsWith("{") ? m[1] : "{}");
+    const inner = m?.[1] ?? "";
+    payload = JSON.parse(inner.startsWith("{") ? inner : "{}");
   } catch { /* not a structured detail */ }
   const kind = String(payload.error ?? "");
   const msg = String(payload.message ?? payload.detail ?? raw);

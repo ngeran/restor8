@@ -87,8 +87,8 @@ export default function Devices({ onSelectDevice }: { onSelectDevice?: (name: st
             + add
           </button>
         </div>
-        {devicesQ.error && <Retry onRetry={() => devicesQ.reload()} note="devices failed to load" />}
-        {!devicesQ.error && devices.length === 0 && <Skeleton lines={6} />}
+        {devicesQ.error ? <Retry onRetry={() => devicesQ.reload()} note="devices failed to load" /> : null}
+        {!devicesQ.error && devices.length === 0 ? <Skeleton lines={6} /> : null}
         <div className="overflow-x-auto">
           <table className="w-full font-mono text-xs">
             <thead>

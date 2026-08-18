@@ -10,7 +10,7 @@ const statusColor = (s: string) =>
   s === "passed" ? "text-ok" : s === "failed" ? "text-err" : "text-warn";
 
 export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
-  const [busy] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [picker, setPicker] = useState(false);
   const [detailRun, setDetailRun] = useState<number | null>(null);
   const { events, state } = useEvents();
@@ -48,8 +48,8 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
         <Card label="underlay" value={topo?.underlay ?? "—"} small />
         <Card
           label="live feed"
-          value={live ? "connected" : "offline"}
-          valueClass={live ? "text-ok" : "text-err"}
+          value={state.kind === "live" ? "connected" : "offline"}
+          valueClass={state.kind === "live" ? "text-ok" : "text-err"}
           small
         />
       </div>

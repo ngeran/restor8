@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Dashboard from "./Dashboard";
 import Devices from "./Devices";
 import Configurations from "./Configurations";

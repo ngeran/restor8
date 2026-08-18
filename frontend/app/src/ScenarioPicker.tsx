@@ -98,7 +98,7 @@ export default function ScenarioPicker({ onClose, onStarted }: { onClose: () => 
             <div className="grid max-h-60 gap-1 overflow-y-auto">
               {Object.entries(preview).map(([node, cfg]) => (
                 <details key={node} className="rounded-[0.25rem] border border-edge">
-                  <summary className="cursor-pointer px-2 py-1 font-mono text-[11px] text-accent-soft">{node} · {cfg.splitlines().length} lines</summary>
+                  <summary className="cursor-pointer px-2 py-1 font-mono text-[11px] text-accent-soft">{node} · {cfg.split("\n").length} lines</summary>
                   <pre className="max-h-40 overflow-auto bg-black px-2 py-1 font-mono text-[10px] leading-4 text-dim-neutral">{cfg}</pre>
                 </details>
               ))}

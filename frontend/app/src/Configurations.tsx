@@ -29,7 +29,7 @@ export default function Configurations({ initialDevice }: { initialDevice?: stri
   const devices = devicesQ.data ?? [];
   useEffect(() => {
     if (!devices.length) return;
-    const want = initialDevice && devices.find((d) => d.name === initialDevice);
+    const want = initialDevice ? devices.find((d) => d.name === initialDevice) : undefined;
     if (!selected || (initialDevice && selected.name !== initialDevice)) setSelected(want ?? devices[0]);
   }, [devices, initialDevice]);
 
@@ -145,6 +145,7 @@ function Running({ device, refreshKey }: { device: Device; refreshKey: number })
 }
 
 function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) {
+  const toast = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [tplName, setTplName] = useState<string>("__raw");
   const [values, setValues] = useState<Record<string, string>>({});
@@ -426,6 +427,7 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
 }
 
 function History({ device, refreshKey }: { device: Device; refreshKey: number }) {
+  const toast = useToast();
   const [history, setHistory] = useState<BackupEntry[]>([]);
   const [sha, setSha] = useState("");
   const [diff, setDiff] = useState<{ changed_lines?: number; diff?: string } | null>(null);

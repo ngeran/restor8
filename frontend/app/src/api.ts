@@ -51,7 +51,7 @@ export const api = {
   runs: () => fetch("/api/runs").then((r) => j<Run[]>(r)),
   run: (id: number) => fetch(`/api/runs/${id}`).then((r) => j<Run>(r)),
   backups: (id: number) => fetch(`/api/devices/${id}/backups`).then((r) => j<BackupEntry[]>(r)),
-  backupNow: (id: number) => post<BackupEntry>(`/api/devices/${id}/backup`),
+  backupNow: (id: number) => post<{ device: string; commit: string | null; changed: boolean; path: string }>(`/api/devices/${id}/backup`),
   restore: (id: number, sha: string) => post<Record<string, unknown>>(`/api/devices/${id}/restore/${sha}?approve=true`),
   diff: (id: number, sha: string) => fetch(`/api/devices/${id}/diff/${sha}`).then((r) => j<Record<string, unknown>>(r)),
   startRun: (name: string) => post<Record<string, unknown>>(`/api/scenarios/${name}/run`),
