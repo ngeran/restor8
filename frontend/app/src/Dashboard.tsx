@@ -3,12 +3,16 @@ import { api, type Device, type Run, type Topology } from "./api";
 import { useEvents } from "./events";
 import { useToast } from "./toast";
 import { useResource } from "./resource";
+import ScenarioPicker from "./ScenarioPicker";
+import RunDetail from "./RunDetail";
 
 const statusColor = (s: string) =>
   s === "passed" ? "text-ok" : s === "failed" ? "text-err" : "text-warn";
 
 export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
-  const [busy, setBusy] = useState(false);
+  const [busy] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const [detailRun, setDetailRun] = useState<number | null>(null);
   const { events, state } = useEvents();
   const toast = useToast();
 
@@ -57,18 +61,18 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
               scenario runs
             </h2>
             <button
-              onClick={run}
+              onClick={() => setPicker(true)}
               disabled={busy}
               className="rounded-[0.25rem] bg-accent/10 px-3 py-1 font-mono text-xs text-accent hover:bg-accent/20 disabled:opacity-50"
             >
-              {busy ? "starting…" : "▶ run bgp-fabric"}
+              ▶ run scenario…
             </button>
           </div>
           <div className="grid gap-1">
             {runs.slice(0, 8).map((r) => (
               <button
                 key={r.id}
-                onClick={() => onGoto("labs")}
+                onClick={() => setDetailRun(r.id)}
                 className="flex items-center justify-between rounded-[0.25rem] px-2 py-1 font-mono text-xs hover:bg-panel"
               >
                 <span className="text-[dim-neutral]">#{r.id} {r.scenario}</span>
@@ -107,6 +111,8 @@ export default function Dashboard({ onGoto }: { onGoto: (t: string) => void }) {
           </div>
         </section>
       </div>
+      {picker && <ScenarioPicker onClose={() => setPicker(false)} onStarted={(id) => setDetailRun(id)} />}
+      {detailRun !== null && <RunDetail runId={detailRun} onClose={() => setDetailRun(null)} />}
     </div>
   );
 }

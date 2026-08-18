@@ -301,11 +301,61 @@ def scenarios() -> list[dict[str, Any]]:
         out.append(
             {
                 "name": d["name"],
+                "protocol": d.get("protocol", d["name"].split("-")[0]),
                 "description": d.get("description", ""),
                 "convergence_timeout": d.get("convergence_timeout", 120),
+                "node_roles": d.get("node_roles", []),
             }
         )
     return out
+
+
+def _mesh_for(definition: dict[str, Any]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Plan+inventory join and per-node rendered peers (shared by run + dry-run)."""
+    plan = _get(f"{TOPOLOGY_URL}/topology").json()
+    devices = {d["name"]: d for d in _get(f"{INVENTORY_URL}/devices").json()}
+    roles = set(definition.get("node_roles", []))
+    planned = [n for n in plan["nodes"] if not roles or n.get("role") in roles]
+    asns = {n["name"]: n["asn"] for n in plan["nodes"]}
+    peers_of: dict[str, list[dict[str, str]]] = {}
+    for link in plan.get("links", []):
+        a, b = link["a"], link["b"]
+        peers_of.setdefault(a, []).append(
+            {"ip": str(link["b_ip"]).split("/")[0], "asn": str(asns[b])}
+        )
+        peers_of.setdefault(b, []).append(
+            {"ip": str(link["a_ip"]).split("/")[0], "asn": str(asns[a])}
+        )
+    mesh: dict[str, dict[str, Any]] = {}
+    for n in planned:
+        dev = devices.get(n["name"])
+        if dev is None:
+            raise RuntimeError(f"{n['name']} not in inventory")
+        mesh[n["name"]] = {"dev": dev, "peers": peers_of.get(n["name"], [])}
+    return plan, mesh
+
+
+@app.post("/scenario/{name}/render")
+def render_scenario(name: str) -> dict[str, Any]:
+    """Dry-run: the rendered per-node config, nothing pushed.
+
+    Mirrors the editor's template preview for whole scenarios — read the
+    exact lines a run would commit, per target, before running it.
+    """
+    f = _APP / "scenarios" / f"{name}.yml"
+    if not f.exists():
+        raise HTTPException(404, f"unknown scenario '{name}' (see /scenarios)")
+    definition = yaml.safe_load(f.read_text())
+    plan, mesh = _mesh_for(definition)
+    template = _ENV.get_template(str(definition["template"]).split("/")[-1])
+    return {
+        "scenario": name,
+        "underlay": plan.get("underlay"),
+        "targets": {
+            node: template.render(peers=m["peers"], **definition.get("vars", {}))
+            for node, m in mesh.items()
+        },
+    }
 
 
 @app.post("/scenario/{name}/run")

@@ -5,6 +5,7 @@
 # applied by `topology.apply`). Expected peer count per node = its link
 # count (P: 5, PE/RR: 3, CE: 1) — the convergence gate uses the per-node
 # number, not a global one.
+protocol: bgp
 name: bgp-fabric
 description: eBGP adjacency over every clabernetes link of the mpls-core fabric
 

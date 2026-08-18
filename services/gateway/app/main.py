@@ -280,6 +280,16 @@ async def runs() -> Any:
     return out[:50]
 
 
+@app.post("/api/scenarios/{name}/render")
+async def render_scenario(name: str) -> Any:
+    # Dry-run: rendered per-target config for a scenario, nothing pushed.
+    async with httpx.AsyncClient(timeout=60) as client:
+        r = await client.post(f"{SCENARIO_URL}/scenario/{name}/render")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
 @app.post("/api/scenarios/{name}/run")
 async def start_run(name: str) -> Any:
     """Start a scenario run from the UI (returns run id immediately)."""
