@@ -141,17 +141,20 @@ def _resolve_creds(req: ConnectRequest) -> tuple[str | None, str | None]:
     if req.user and req.auth:
         return req.user, req.auth
     if req.auth_ref:
-        # 1) statically injected env pair (bootstrap credentials):
-        #    "lab-auth-root" → LAB_AUTH_ROOT_USER / LAB_AUTH_ROOT_PASSWORD
+        # 1) the LIVE profile Secret FIRST — POST /credentials rotation must
+        #    take effect immediately, and the pod's injected env is a stale
+        #    snapshot from ITS startup (rotation-through-env silently kept
+        #    using the old password until restart — seen live, never again).
+        live = _k8s_secret(req.auth_ref)
+        if live:
+            return req.user or live["user"], req.auth or live["password"]
+        # 2) the statically-injected env pair (bootstrap / API-unreachable
+        #    fallback): "lab-auth-root" → LAB_AUTH_ROOT_USER / _PASSWORD
         prefix = req.auth_ref.upper().replace("-", "_")
         user = req.user or os.environ.get(f"{prefix}_USER")
         auth = req.auth or os.environ.get(f"{prefix}_PASSWORD")
         if user and auth:
             return user, auth
-        # 2) the LIVE profile Secret (day-2 management: POST /credentials)
-        live = _k8s_secret(req.auth_ref)
-        if live:
-            return req.user or live["user"], req.auth or live["password"]
     return req.user or os.environ.get("LAB_USER"), req.auth or os.environ.get("LAB_PASSWORD")
 
 
