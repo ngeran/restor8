@@ -14,6 +14,8 @@ const EMPTY: Partial<Device> = { name: "", mgmt_ip: "", port: 830, platform: "CR
 export default function Devices({ onSelectDevice }: { onSelectDevice?: (name: string) => void }) {
   const devicesQ = useResource("devices", api.devices);
   const topoQ = useResource("topology", api.topology);
+  const credsQ = useResource("credentials", api.credentials);
+  const profiles = credsQ.data ?? [];
   const devices = devicesQ.data ?? [];
   const topo = topoQ.data ?? null;
   const toast = useToast();
@@ -22,6 +24,7 @@ export default function Devices({ onSelectDevice }: { onSelectDevice?: (name: st
   const [form, setForm] = useState<Partial<Device> | null>(null);   // add/edit
   const [deleting, setDeleting] = useState<Device | null>(null);
   const [drawer, setDrawer] = useState<Device | null>(null);
+  const [cred, setCred] = useState({ name: "", user: "root", password: "" });
 
   useEffect(() => {
     if (devicesQ.error) toast.fromError("devices failed to load", devicesQ.error);
@@ -71,6 +74,53 @@ export default function Devices({ onSelectDevice }: { onSelectDevice?: (name: st
 
   return (
     <>
+      <section className="mb-4 rounded-[0.25rem] border border-edge bg-card">
+        <div className="border-b border-edge px-4 py-2 font-mono text-[10px] uppercase tracking-widest text-dim-neutral">
+          credential profiles — assigned to devices via auth_ref · passwords write-only · effective immediately
+        </div>
+        <div className="flex flex-wrap items-center gap-2 px-4 py-2">
+          {profiles.map((p) => {
+            const used = devices.filter((d) => d.auth_ref === p.name).length;
+            return (
+              <span key={p.name} className="rounded-[0.25rem] border border-edge px-2 py-1 font-mono text-[11px]">
+                <span className="text-accent-soft">{p.name}</span>
+                <span className="text-dimmer-neutral"> · {p.user} · {used} device{used === 1 ? "" : "s"}</span>
+              </span>
+            );
+          })}
+          <input
+            value={cred.name} onChange={(e) => setCred((c) => ({ ...c, name: e.target.value }))}
+            placeholder="profile name" aria-label="profile name"
+            className="ml-auto w-36 rounded-[0.25rem] border border-edge bg-black px-2 py-1 font-mono text-[11px] placeholder:text-dimmer-neutral"
+          />
+          <input
+            value={cred.user} onChange={(e) => setCred((c) => ({ ...c, user: e.target.value }))}
+            placeholder="user" aria-label="username"
+            className="w-24 rounded-[0.25rem] border border-edge bg-black px-2 py-1 font-mono text-[11px]"
+          />
+          <input
+            type="password" value={cred.password} onChange={(e) => setCred((c) => ({ ...c, password: e.target.value }))}
+            placeholder="password" aria-label="password"
+            className="w-36 rounded-[0.25rem] border border-edge bg-black px-2 py-1 font-mono text-[11px] placeholder:text-dimmer-neutral"
+          />
+          <button
+            onClick={async () => {
+              if (!cred.name || !cred.password) { toast.err("profile name and password required"); return; }
+              try {
+                const r = await api.upsertCredential(cred.name.startsWith("lab-auth") ? cred.name : `lab-auth-${cred.name}`, cred.user, cred.password);
+                toast.ok(`profile ${r.name} saved`, "effective immediately — no restart");
+                setCred({ name: "", user: "root", password: "" });
+                credsQ.reload();
+              } catch (e) { toast.fromError("profile save failed", e); }
+            }}
+            aria-label="save credential profile"
+            className="rounded-[0.25rem] bg-secondary/10 px-3 py-1 font-mono text-[11px] text-secondary hover:bg-secondary/20"
+          >
+            + save / rotate
+          </button>
+        </div>
+      </section>
+
       <section className="rounded-[0.25rem] border border-edge bg-card">
         <div className="flex items-center gap-2 border-b border-edge px-4 py-3">
           <span className="font-mono text-xs uppercase tracking-widest text-dim-neutral">
@@ -127,7 +177,17 @@ export default function Devices({ onSelectDevice }: { onSelectDevice?: (name: st
               {F("mgmt_ip", "mgmt address (cluster-reachable)")}
               {F("port", "NETCONF port", "number")}
               {F("platform", "platform")}
-              {F("auth_ref", "auth_ref (k8s Secret NAME — never a password here)")}
+              <label className="grid gap-1">
+                <span className="font-mono text-[10px] uppercase tracking-widest text-dim-neutral">auth profile</span>
+                <select
+                  value={String(form?.auth_ref ?? "")}
+                  onChange={(e) => setForm((f) => ({ ...f!, auth_ref: e.target.value }))}
+                  className="rounded-[0.25rem] border border-edge bg-black px-2 py-1.5 font-mono text-xs"
+                >
+                  {profiles.map((p) => <option key={p.name} value={p.name}>{p.name} ({p.user})</option>)}
+                  <option value={String(form?.auth_ref ?? "")}>{String(form?.auth_ref ?? "")} (current)</option>
+                </select>
+              </label>
               {F("containerlab_node", "containerlab/clabernetes node")}
             </div>
             <div className="mt-4 flex justify-end gap-2">

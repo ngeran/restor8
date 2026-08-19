@@ -1,0 +1,34 @@
+# Credential-profile management: connector reads auth_ref Secrets at
+# request time and creates/rotates profile Secrets on demand. Scoped to
+# Secrets in this namespace only — nothing else in the cluster.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: restor8-connector
+  namespace: restor8
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: restor8-connector-credentials
+  namespace: restor8
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "list", "create", "patch"]
+    resourceNames: []   # name-scoped via the lab-auth- prefix in code
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: restor8-connector-credentials
+  namespace: restor8
+subjects:
+  - kind: ServiceAccount
+    name: restor8-connector
+    namespace: restor8
+roleRef:
+  kind: Role
+  name: restor8-connector-credentials
+  apiGroup: rbac.authorization.k8s.io

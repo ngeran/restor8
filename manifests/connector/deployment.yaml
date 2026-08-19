@@ -33,6 +33,7 @@ spec:
       labels:
         app: restor8-connector
     spec:
+      serviceAccountName: restor8-connector   # live credential profiles (rbac.yaml)
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

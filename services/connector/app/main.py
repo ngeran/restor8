@@ -13,11 +13,15 @@ with their phases.
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 import threading
 import time
+from pathlib import Path
+
+import httpx
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -73,6 +77,58 @@ class ConnectRequest(BaseModel):
     timeout: int = Field(default=30, description="per-RPC timeout (seconds)")
 
 
+# ── credential profiles (live k8s Secrets) ─────────────────────────────
+#
+# auth_ref Secrets are read from the k8s API AT REQUEST TIME: a new or
+# rotated profile (POST /credentials) takes effect immediately — no pod
+# restart, no manifest edit. The statically-injected env pairs remain the
+# first-line fallback for bootstrap credentials; the API is the day-2 path.
+# Passwords are WRITE-ONLY here: listing never returns them.
+
+_SA = Path("/var/run/secrets/kubernetes.io/serviceaccount")
+PROFILE_PREFIX = "lab-auth"
+
+
+def _k8s_headers() -> dict[str, str] | None:
+    """Auth headers for the in-cluster API, or None outside a cluster."""
+    token_file = _SA / "token"
+    if not token_file.exists():
+        return None
+    return {"Authorization": f"Bearer {token_file.read_text().strip()}"}
+
+
+def _k8s_secret(name: str) -> dict[str, str] | None:
+    """Read one Secret's LAB_USER/LAB_PASSWORD (None if absent/off-cluster).
+
+    Raises:
+        Restor8Error-ish RuntimeError: the API answered but not 200/404
+        (RBAC misconfig etc.) — surfaced so misconfiguration isn't silent.
+    """
+    headers = _k8s_headers()
+    if headers is None:
+        return None
+    ns = (_SA / "namespace").read_text().strip() if (_SA / "namespace").exists() else "restor8"
+    ca = str(_SA / "ca.crt") if (_SA / "ca.crt").exists() else False
+    r = httpx.get(
+        f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets/{name}",
+        headers=headers,
+        verify=ca,
+        timeout=10,
+    )
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        raise RuntimeError(f"k8s API {r.status_code} reading secret {name}: {r.text[:150]}")
+    data = r.json().get("data", {})
+    try:
+        return {
+            "user": base64.b64decode(data["LAB_USER"]).decode(),
+            "password": base64.b64decode(data["LAB_PASSWORD"]).decode(),
+        }
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError(f"secret {name} lacks LAB_USER/LAB_PASSWORD keys") from exc
+
+
 def _resolve_creds(req: ConnectRequest) -> tuple[str | None, str | None]:
     """Resolve (user, password) per the order documented on ConnectRequest.
 
@@ -85,16 +141,17 @@ def _resolve_creds(req: ConnectRequest) -> tuple[str | None, str | None]:
     if req.user and req.auth:
         return req.user, req.auth
     if req.auth_ref:
-        # auth_ref is a Secret name verbatim: "lab-auth-root" →
-        # LAB_AUTH_ROOT_USER / LAB_AUTH_ROOT_PASSWORD. Checked BEFORE the
-        # default pair — in-cluster the defaults are always set, so an
-        # auth_ref that lost to them would silently authenticate with the
-        # wrong credential.
+        # 1) statically injected env pair (bootstrap credentials):
+        #    "lab-auth-root" → LAB_AUTH_ROOT_USER / LAB_AUTH_ROOT_PASSWORD
         prefix = req.auth_ref.upper().replace("-", "_")
         user = req.user or os.environ.get(f"{prefix}_USER")
         auth = req.auth or os.environ.get(f"{prefix}_PASSWORD")
         if user and auth:
             return user, auth
+        # 2) the LIVE profile Secret (day-2 management: POST /credentials)
+        live = _k8s_secret(req.auth_ref)
+        if live:
+            return req.user or live["user"], req.auth or live["password"]
     return req.user or os.environ.get("LAB_USER"), req.auth or os.environ.get("LAB_PASSWORD")
 
 
@@ -535,3 +592,96 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
     finally:
         jc.close()
     return SnapshotResponse(session_id=jc.session_id, rpc=req.rpc, xml=xml)
+
+
+# ── credential profile management (k8s Secrets, live) ─────────────────
+
+
+class CredentialProfile(BaseModel):
+    """A named credential profile — write-only password."""
+
+    name: str = Field(description="profile name; Secret becomes lab-auth-<name>")
+    user: str = Field(description="SSH username")
+    password: str = Field(description="SSH password (write-only — never listed)", exclude=True)
+
+
+class CredentialProfileInfo(BaseModel):
+    """What listing shows: identity, never the secret."""
+
+    name: str
+    user: str
+
+
+def _secret_name(profile: str) -> str:
+    """Profile → full Secret name (lab-auth prefix enforced for RBAC scope)."""
+    name = profile if profile.startswith(PROFILE_PREFIX) else f"{PROFILE_PREFIX}-{profile}"
+    if "/" in name or " " in name:
+        raise HTTPException(422, "profile names: letters, digits, dashes only")
+    return name
+
+
+@app.get("/credentials", response_model=list[CredentialProfileInfo])
+def list_credentials() -> list[CredentialProfileInfo]:
+    """All credential profiles (usernames only — passwords are write-only)."""
+    headers = _k8s_headers()
+    if headers is None:
+        return []
+    ns = (_SA / "namespace").read_text().strip() if (_SA / "namespace").exists() else "restor8"
+    ca = str(_SA / "ca.crt") if (_SA / "ca.crt").exists() else False
+    r = httpx.get(
+        f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets",
+        headers=headers,
+        verify=ca,
+        timeout=10,
+    )
+    if r.status_code != 200:
+        raise HTTPException(502, f"k8s API {r.status_code}: {r.text[:150]}")
+    out = []
+    for s in r.json().get("items", []):
+        name = s["metadata"]["name"]
+        if not name.startswith(PROFILE_PREFIX):
+            continue
+        user = base64.b64decode(s.get("data", {}).get("LAB_USER", "")).decode() if s.get("data", {}).get("LAB_USER") else ""
+        out.append(CredentialProfileInfo(name=name, user=user))
+    return sorted(out, key=lambda p: p.name)
+
+
+@app.post("/credentials", response_model=CredentialProfileInfo, status_code=201)
+def upsert_credential(profile: CredentialProfile) -> CredentialProfileInfo:
+    """Create or rotate a profile — effective IMMEDIATELY (no restart).
+
+    Args:
+        profile: name, username, password. Existing profile with the same
+            name is updated in place (rotation).
+    """
+    headers = _k8s_headers()
+    if headers is None:
+        raise HTTPException(501, "not running in-cluster (no service account)")
+    ns = (_SA / "namespace").read_text().strip() if (_SA / "namespace").exists() else "restor8"
+    ca = str(_SA / "ca.crt") if (_SA / "ca.crt").exists() else False
+    secret = _secret_name(profile.name)
+    body = {
+        "apiVersion": "v1",
+        "kind": "Secret",
+        "metadata": {"name": secret, "namespace": ns, "labels": {"restor8.io/credential": "true"}},
+        "type": "Opaque",
+        "data": {
+            "LAB_USER": base64.b64encode(profile.user.encode()).decode(),
+            "LAB_PASSWORD": base64.b64encode(profile.password.encode()).decode(),
+        },
+    }
+    base = f"https://kubernetes.default.svc/api/v1/namespaces/{ns}/secrets"
+    created = httpx.post(base, headers=headers, json=body, verify=ca, timeout=10)
+    if created.status_code == 409:  # exists → rotate in place
+        rotated = httpx.patch(
+            f"{base}/{secret}",
+            headers={**headers, "Content-Type": "application/merge-patch+json"},
+            json={"data": body["data"]},
+            verify=ca,
+            timeout=10,
+        )
+        if rotated.status_code not in (200, 201):
+            raise HTTPException(502, f"rotation failed ({rotated.status_code}): {rotated.text[:150]}")
+    elif created.status_code not in (200, 201):
+        raise HTTPException(502, f"create failed ({created.status_code}): {created.text[:150]}")
+    return CredentialProfileInfo(name=secret, user=profile.user)

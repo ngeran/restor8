@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Topology } from "./api";
+import { api, type Device, type Topology } from "./api";
 import { useEvents } from "./events";
 import { useResource } from "./resource";
-import { api, type Device } from "./api";
 
 // Draggable SVG canvas of the planned fabric; nodes glow accent when a
 // live event names them (the "live status" of spec §3/§7).

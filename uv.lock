@@ -952,6 +952,7 @@ version = "0.1.0"
 source = { virtual = "services/connector" }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "restor8-core" },
     { name = "uvicorn" },
 ]
@@ -959,6 +960,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]

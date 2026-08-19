@@ -9,6 +9,7 @@ description = "Owns all live PyEZ/NETCONF sessions; every other service reaches 
 requires-python = ">=3.11"
 dependencies = [
     "fastapi",
+    "httpx",
     "uvicorn",
     "restor8-core",
 ]

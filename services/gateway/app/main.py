@@ -254,6 +254,22 @@ async def apply_lab(name: str) -> Any:
 # ── held confirmed-commit sessions (§3: the two-phase safety window) ───
 
 
+@app.get("/api/credentials")
+async def credentials() -> Any:
+    """Credential profiles (usernames only)."""
+    return await _proxy(f"{CONNECTOR_URL}/credentials")
+
+
+@app.post("/api/credentials")
+async def upsert_credential(body: dict[str, Any]) -> Any:
+    """Create/rotate a credential profile — effective immediately."""
+    async with httpx.AsyncClient(timeout=30) as client:
+        r = await client.post(f"{CONNECTOR_URL}/credentials", json=body)
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
 @app.get("/api/session/{session_id}")
 async def session_status(session_id: str) -> Any:
     """Status of a held session: host + seconds left in the window."""
