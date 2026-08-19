@@ -1,11 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, type Topology } from "./api";
 import { useEvents } from "./events";
+import { useResource } from "./resource";
+import { api, type Device } from "./api";
 
 // Draggable SVG canvas of the planned fabric; nodes glow accent when a
 // live event names them (the "live status" of spec §3/§7).
 
 interface Pos { x: number; y: number }
+
+
+/** "10.10.0.0/30 — p1 eth1 (10.10.0.1) ↔ p2 eth1 (10.10.0.2)" */
+function linkTitle(l: { a: string; a_if: string; a_ip: string; b: string; b_if: string; b_ip: string }): string {
+  const seg = netOf(l.a_ip);
+  return `${seg} — ${l.a} ${l.a_if} (${l.a_ip.split("/")[0]}) ↔ ${l.b} ${l.b_if} (${l.b_ip.split("/")[0]})`;
+}
+
+/** Network address of a /30 (plan convention: .1/.2 hosts). */
+function netOf(ipWithPrefix: string): string {
+  const [ip, len] = ipWithPrefix.split("/");
+  if (len !== "30") return ipWithPrefix;
+  const o = ip.split(".");
+  return `${o[0]}.${o[1]}.${o[2]}.0/30`;
+}
 
 const ROLE_RADIUS: Record<string, number> = { P: 26, PE: 22, RR: 22, CE: 18 };
 // OLED-friendly: luminance spread across channels instead of one hot hue
@@ -14,9 +31,24 @@ const ROLE_COLOR: Record<string, string> = { P: "#59c2ff", PE: "#7ce38b", RR: "#
 export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: string) => void }) {
   const [topo, setTopo] = useState<Topology | null>(null);
   const { events } = useEvents();
+  const devicesQ = useResource("devices", api.devices);
+  const mgmtOf = new Map((devicesQ.data ?? []).map((d: Device) => [d.name, d.mgmt_ip]));
   const [pos, setPos] = useState<Record<string, Pos>>({});
   const drag = useRef<{ name: string; dx: number; dy: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // full real estate: the viewBox tracks the container's actual size
+  // (ResizeObserver), so the canvas IS the panel — no letterboxing.
+  const [vb, setVb] = useState({ w: 1200, h: 700 });
+  useEffect(() => {
+    const el = svgRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) setVb({ w: Math.round(r.width), h: Math.round(r.height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   // §7 zoom/pan: view transform + background-drag panning
   const [view, setView] = useState({ x: 0, y: 0, k: 1 });
   const pan = useRef<{ x: number; y: number } | null>(null);
@@ -29,7 +61,8 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
   // layout: seeded ring (P-core inner, others outer) and PERSISTED to
   // localStorage per topology name — dragged positions survive tab
   // switches and reloads (§1 fix; backend-stored layout is a stretch goal)
-  const storageKey = topo ? `restor8.layout.${topo.name}` : "";
+  // v2: coordinates are now in live canvas pixels (was fixed 900x520)
+  const storageKey = topo ? `restor8.layout.v2.${topo.name}` : "";
   const layout = useMemo(() => {
     if (!topo) return null;
     let saved: Record<string, Pos> | null = null;
@@ -42,18 +75,19 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
     }
     const core = topo.nodes.filter((n) => n.role === "P");
     const edge = topo.nodes.filter((n) => n.role !== "P");
+    const cx = vb.w / 2, cy = vb.h / 2;
     const p: Record<string, Pos> = {};
     core.forEach((n, i) => {
       const a = (i / core.length) * 2 * Math.PI - Math.PI / 2;
-      p[n.name] = { x: 450 + 130 * Math.cos(a), y: 260 + 130 * Math.sin(a) };
+      p[n.name] = { x: cx + vb.h * 0.22 * Math.cos(a), y: cy + vb.h * 0.22 * Math.sin(a) };
     });
     edge.forEach((n, i) => {
       const a = (i / edge.length) * 2 * Math.PI - Math.PI / 2;
-      p[n.name] = { x: 450 + 260 * Math.cos(a), y: 260 + 240 * Math.sin(a) };
+      p[n.name] = { x: cx + vb.w * 0.38 * Math.cos(a), y: cy + vb.h * 0.42 * Math.sin(a) };
     });
     setPos(p);
     return p;
-  }, [topo, storageKey]);
+  }, [topo, storageKey, vb.w, vb.h]);
 
   // save (debounced by React's commit) whenever positions change
   useEffect(() => {
@@ -67,8 +101,9 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
   const now = Date.now() / 1000;
 
   const pt = (svg: SVGSVGElement, ev: React.PointerEvent) => {
+    // viewBox tracks the element 1:1 — plain client offsets are canvas coords
     const r = svg.getBoundingClientRect();
-    return { x: ((ev.clientX - r.left) / r.width) * 900, y: ((ev.clientY - r.top) / r.height) * 520 };
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
   };
 
   if (!topo || !layout) {
@@ -82,8 +117,8 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
       </div>
       <svg
         ref={svgRef}
-        viewBox="0 0 900 520"
-        className="h-[520px] w-full touch-none select-none"
+        viewBox={`0 0 ${vb.w} ${vb.h}`}
+        className="h-[calc(100vh-230px)] min-h-[420px] w-full touch-none select-none"
         onWheel={(e) => {
           e.preventDefault();
           const factor = e.deltaY < 0 ? 1.1 : 0.9;
@@ -125,7 +160,7 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
               onPointerEnter={() => setHoverLink(i)}
               onPointerLeave={() => setHoverLink(null)}
             >
-              <title>{`${l.a} ${l.a_if} (${l.a_ip}) ↔ ${l.b} ${l.b_if} (${l.b_ip})`}</title>
+              <title>{linkTitle(l)}</title>
             </line>
           );
         })}
@@ -146,7 +181,8 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
               }}
               onClick={(e) => { if (Math.abs(drag.current?.dx ?? 0) < 2) onSelectDevice?.(n.name); }}
               style={{ cursor: "grab" }}
-            >
+             >
+              <title>{`${n.name} — ${n.role} · AS${n.asn} · lo0 ${n.loopback} · mgmt ${mgmtOf.get(n.name) ?? "unknown"}`}</title>
               <circle
                 r={r}
                 fill="#131a2b"
