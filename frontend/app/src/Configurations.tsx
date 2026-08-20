@@ -37,7 +37,7 @@ export default function Configurations({ initialDevice }: { initialDevice?: stri
   const toast = useToast();
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+    <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
       <aside className="grid content-start gap-4">
         <div className="rounded-[0.25rem] border border-edge bg-card">
           <div className="flex items-center justify-between border-b border-edge px-3 py-2">
@@ -266,14 +266,14 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
   };
 
   return (
-    <div className="grid gap-4 p-4 lg:grid-cols-[300px_1fr]">
+    <div className="grid gap-4 p-4 xl:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)]">
       <div className="grid content-start gap-3">
         <label className="grid gap-1">
           <span className="font-mono text-[10px] uppercase tracking-widest text-dim-neutral">template</span>
           <select
             value={tplName}
             onChange={(e) => setTplName(e.target.value)}
-            className="rounded-[0.25rem] border border-edge bg-black px-2 py-1.5 font-mono text-xs text-accent-soft"
+            className="w-full max-w-full overflow-hidden text-ellipsis rounded-[0.25rem] border border-edge bg-black px-2 py-1.5 font-mono text-xs text-accent-soft"
           >
             <option value="__raw">— raw payload —</option>
             {Object.entries(groups).map(([g, items]) => (
@@ -364,7 +364,7 @@ function Editor({ device, onPushed }: { device: Device; onPushed: () => void }) 
             rows={12}
             spellCheck={false}
             placeholder="render a template above, or write set-format lines here"
-            className="rounded-[0.25rem] border border-edge bg-black px-3 py-2 font-mono text-[11px] leading-5 text-text placeholder:text-dimmer-neutral focus:border-accent"
+            className="min-h-48 w-full rounded-[0.25rem] border border-edge bg-black px-3 py-2 font-mono text-[11px] leading-5 text-text placeholder:text-dimmer-neutral focus:border-accent"
           />
         </div>
 
