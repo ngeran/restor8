@@ -40,8 +40,8 @@ export default function Configurations({ initialDevice }: { initialDevice?: stri
     <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
       <aside className="grid content-start gap-4">
         <div className="rounded-[0.25rem] border border-edge bg-card">
-          <div className="flex items-center justify-between border-b border-edge px-3 py-2">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-dim-neutral">device</span>
+          <div className="border-b border-edge px-3 py-2">
+            <div className="mb-2 font-mono text-[10px] uppercase tracking-widest text-dim-neutral">device</div>
             {selected && (
               <button
                 onClick={async () => {
@@ -51,10 +51,10 @@ export default function Configurations({ initialDevice }: { initialDevice?: stri
                     setRefreshKey((k) => k + 1);
                   } catch (e) { toast.fromError(`backup of ${selected.name} failed`, e); }
                 }}
-                className="font-mono text-[10px] text-ok hover:glow-ok"
+                className="w-full rounded-[0.25rem] border border-ok/40 bg-ok/10 px-3 py-1.5 font-mono text-xs text-ok hover:bg-ok/20"
                 title="backup running config → git"
               >
-                ⬇ backup
+                ⬇ backup {selected.name} now
               </button>
             )}
           </div>
