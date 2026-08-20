@@ -270,6 +270,71 @@ async def upsert_credential(body: dict[str, Any]) -> Any:
     return r.json()
 
 
+# ── live interface state (topology hover source) ────────────────────────
+#
+# Fan-out snapshots of every device's interface table through connector,
+# parsed to {iface: {addrs, oper}} and cached 30s — hovers read the cache,
+# never the wire. Whitespace-tolerant parsing throughout: cRPD puts
+# newlines inside its XML tags (the recurring theme).
+
+import re as _re
+import time as _time
+
+_iface_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def _parse_interfaces(xml: str) -> dict[str, dict[str, Any]]:
+    """terse interface-information XML → {iface: {addrs: [...], oper}}}."""
+    out: dict[str, dict[str, Any]] = {}
+    for block in _re.findall(r"<physical-interface>([\s\S]*?)</physical-interface>", xml):
+        name = (_re.search(r"<name>\s*([^\s<]+)", block) or [None, ""])[1]
+        oper = _re.search(r"<oper-status>\s*(\S+)", block)
+        addrs = [
+            a for a in _re.findall(r"<ifa-local>\s*([\d.]+/\d+)\s*</ifa-local>", block)
+            if ":" not in a  # skip inet6
+        ]
+        out[name] = {"addrs": addrs, "oper": oper.group(1) if oper else None}
+    return out
+
+
+@app.get("/api/interfaces")
+async def interfaces() -> Any:
+    """Live interface table for every device (30s cache, fan-out snapshot).
+
+    Devices that fail are reported with their error, not dropped — the
+    hover shows "unreachable" rather than stale-guessing.
+    """
+    cached = _iface_cache.get("all")
+    if cached and _time.monotonic() - cached[0] < 30:
+        return cached[1]
+
+    devices = await _proxy(f"{INVENTORY_URL}/devices")
+
+    async def one(dev: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+        try:
+            async with httpx.AsyncClient(timeout=90) as client:
+                r = await client.post(
+                    f"{CONNECTOR_URL}/snapshot",
+                    json={
+                        "host": dev["mgmt_ip"],
+                        "port": dev["port"],
+                        "auth_ref": dev["auth_ref"],
+                        "rpc": "get_interface_information",
+                        "args": {"terse": "true"},
+                    },
+                )
+            if r.status_code != 200:
+                return dev["name"], {"error": str(r.json().get("detail", {}).get("error", r.status_code))}
+            return dev["name"], {"interfaces": _parse_interfaces(r.json()["xml"])}
+        except Exception as exc:  # noqa: BLE001 — one dead device ≠ dead endpoint
+            return dev["name"], {"error": str(exc)[:120]}
+
+    results = await asyncio.gather(*(one(d) for d in devices))
+    payload = {"at": _time.time(), "devices": dict(results)}
+    _iface_cache["all"] = (_time.monotonic(), payload)
+    return payload
+
+
 @app.get("/api/session/{session_id}")
 async def session_status(session_id: str) -> Any:
     """Status of a held session: host + seconds left in the window."""

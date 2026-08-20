@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Device, type Topology } from "./api";
+import { api, type Device, type PlanNode, type Topology } from "./api";
 import { useEvents } from "./events";
 import { useResource } from "./resource";
 
@@ -23,6 +23,54 @@ function netOf(ipWithPrefix: string): string {
   return `${o[0]}.${o[1]}.${o[2]}.0/30`;
 }
 
+
+/** Node hover: identity + plan + LIVE per-interface state with drift marks. */
+function nodeTitle(
+  n: PlanNode,
+  live: { interfaces?: Record<string, { addrs: string[]; oper: string | null }>; error?: string } | undefined,
+  topo: Topology,
+  mgmt: string | undefined,
+): string {
+  const head = `${n.name} — ${n.role} · AS${n.asn} · lo0 ${n.loopback} · mgmt ${mgmt ?? "?"}`;
+  if (!live) return head + "\n(live state: no data)";
+  if (live.error) return head + `\n(live state: unreachable — ${live.error.slice(0, 60)})`;
+  const ifs = live.interfaces ?? {};
+  const lines: string[] = [];
+  // planned links: live address present and matching?
+  for (const l of topo.links) {
+    if (l.a === n.name) {
+      const got = ifs[l.a_if]?.addrs ?? [];
+      const ok = got.includes(l.a_ip);
+      lines.push(`  ${l.a_if} → ${l.b}: ${ok ? `${l.a_ip} ✓` : got.length ? `${got.join(", ")} ✗ (planned ${l.a_ip})` : "no address ✗"}`);
+    } else if (l.b === n.name) {
+      const got = ifs[l.b_if]?.addrs ?? [];
+      const ok = got.includes(l.b_ip);
+      lines.push(`  ${l.b_if} → ${l.a}: ${ok ? `${l.b_ip} ✓` : got.length ? `${got.join(", ")} ✗ (planned ${l.b_ip})` : "no address ✗"}`);
+    }
+  }
+  const planned = new Set(topo.links.flatMap((l) => (l.a === n.name ? [l.a_if] : l.b === n.name ? [l.b_if] : [])));
+  const planned0 = new Set([...planned].map((i) => i.split(".")[0]));
+  const extras = Object.entries(ifs).filter(([name, v]) => !planned0.has(name) && v.addrs.length && name !== "lo");
+  for (const [name, v] of extras) lines.push(`  ${name}: ${v.addrs.join(", ")} (unplanned)`);
+  const lo = ifs["lo"]?.addrs.filter((a) => a !== "127.0.0.1/8") ?? [];
+  lines.push(`  lo0: ${lo.length ? lo.join(", ") : "missing ✗"} (planned ${n.loopback}/32)`);
+  return head + "\n" + lines.join("\n");
+}
+
+/** True when any planned interface of this node lacks its planned address. */
+function planMismatch(name: string, topo: Topology, live: Record<string, { interfaces?: Record<string, { addrs: string[]; oper: string | null }>; error?: string }>): boolean {
+  const ifs = live[name]?.interfaces;
+  if (!ifs) return false; // no data yet → don't guess
+  if (live[name]?.error) return true;
+  for (const l of topo.links) {
+    if (l.a === name && !(ifs[l.a_if]?.addrs ?? []).includes(l.a_ip)) return true;
+    if (l.b === name && !(ifs[l.b_if]?.addrs ?? []).includes(l.b_ip)) return true;
+  }
+  const node = topo.nodes.find((x) => x.name === name);
+  if (node && !(ifs["lo"]?.addrs ?? []).includes(`${node.loopback}/32`)) return true;
+  return false;
+}
+
 const ROLE_RADIUS: Record<string, number> = { P: 26, PE: 22, RR: 22, CE: 18 };
 // OLED-friendly: luminance spread across channels instead of one hot hue
 const ROLE_COLOR: Record<string, string> = { P: "#59c2ff", PE: "#7ce38b", RR: "#ffb454", CE: "#ffd173" };
@@ -31,6 +79,8 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
   const [topo, setTopo] = useState<Topology | null>(null);
   const { events } = useEvents();
   const devicesQ = useResource("devices", api.devices);
+  const ifacesQ = useResource("interfaces", api.interfaces, { pollMs: 30000 });
+  const liveIfaces = ifacesQ.data?.devices ?? {};
   const mgmtOf = new Map((devicesQ.data ?? []).map((d: Device) => [d.name, d.mgmt_ip]));
   const [pos, setPos] = useState<Record<string, Pos>>({});
   const drag = useRef<{ name: string; dx: number; dy: number } | null>(null);
@@ -181,11 +231,11 @@ export default function Topology({ onSelectDevice }: { onSelectDevice?: (name: s
               onClick={(e) => { if (Math.abs(drag.current?.dx ?? 0) < 2) onSelectDevice?.(n.name); }}
               style={{ cursor: "grab" }}
              >
-              <title>{`${n.name} — ${n.role} · AS${n.asn} · lo0 ${n.loopback} · mgmt ${mgmtOf.get(n.name) ?? "unknown"}`}</title>
+              <title>{nodeTitle(n, liveIfaces[n.name], topo, mgmtOf.get(n.name))}</title>
               <circle
                 r={r}
                 fill="#131a2b"
-                stroke={active ? "#59c2ff" : ROLE_COLOR[n.role] ?? "#16161c"}
+                stroke={active ? "#59c2ff" : planMismatch(n.name, topo, liveIfaces) ? "#ffd173" : ROLE_COLOR[n.role] ?? "#16161c"}
                 strokeWidth={active ? 2.5 : 1.5}
                 className={active ? "glow-accent" : undefined}
               />

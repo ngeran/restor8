@@ -587,7 +587,14 @@ def snapshot(req: SnapshotRequest) -> SnapshotResponse:
     )
     try:
         jc.connect()
-        xml = jc.rpc(req.rpc, **req.args)
+        # "true"/"false" strings → real booleans: flag-style RPC elements
+        # must serialize as <terse/>, and PyEZ only does that for True —
+        # a "true" string becomes <terse>true</terse> = Junos syntax error.
+        args = {
+            k: (v if v not in ("true", "false") else v == "true")
+            for k, v in req.args.items()
+        }
+        xml = jc.rpc(req.rpc, **args)
     except Restor8Error as exc:
         raise _device_error(exc) from exc
     except Exception as exc:

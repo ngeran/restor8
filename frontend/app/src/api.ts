@@ -65,6 +65,10 @@ export const api = {
   push: (body: Record<string, unknown>) => post<{ session_id: string; diff: string; confirmed: boolean }>("/api/config/push", body),
   labs: () => fetch("/api/labs").then((r) => j<Lab[]>(r)),
   applyLab: (name: string) => post<Record<string, unknown>>(`/api/labs/${name}/apply`),
+  interfaces: () => fetch("/api/interfaces").then((r) => j<{
+    at: number;
+    devices: Record<string, { interfaces?: Record<string, { addrs: string[]; oper: string | null }>; error?: string }>;
+  }>(r)),
   credentials: () => fetch("/api/credentials").then((r) => j<{ name: string; user: string }[]>(r)),
   upsertCredential: (name: string, user: string, password: string) =>
     post<{ name: string; user: string }>("/api/credentials", { name, user, password }),

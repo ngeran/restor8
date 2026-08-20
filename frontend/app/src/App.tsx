@@ -56,7 +56,7 @@ export default function App() {
           <span className="ml-auto hidden font-mono text-[10px] text-dimmer-neutral md:inline">g d · g v · g l · g c · g t</span>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-6 py-6">
+      <main className={tab === "topology" ? "w-full px-4 py-4" : "mx-auto max-w-6xl px-6 py-6"}>
         {tab === "dashboard" && <Dashboard onGoto={(t) => setTab(t as Tab)} />}
         {tab === "devices" && <Devices onSelectDevice={(name) => { setFocusDevice(name); setTab("configurations"); }} />}
         {tab === "labs" && <Labs />}
