@@ -69,6 +69,11 @@ export const api = {
     at: number;
     devices: Record<string, { interfaces?: Record<string, { addrs: string[]; oper: string | null }>; error?: string }>;
   }>(r)),
+  discovered: () => fetch("/api/topology/discover").then((r) => j<{
+    at: number;
+    nodes: { name: string; id: number; platform: string; mgmt: string; state: string }[];
+    links: { a: string; a_if: string; a_ip: string; b: string | null; b_if: string | null; b_ip: string | null; segment: string; state: string }[];
+  }>(r)),
   credentials: () => fetch("/api/credentials").then((r) => j<{ name: string; user: string }[]>(r)),
   upsertCredential: (name: string, user: string, password: string) =>
     post<{ name: string; user: string }>("/api/credentials", { name, user, password }),

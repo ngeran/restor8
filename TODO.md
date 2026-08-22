@@ -197,3 +197,17 @@ early, prove it often.
 - [ ] Observability: structured JSON logs from each service into the existing
       ARGO/PULSE stack (Prometheus/Grafana/Loki) — same scrape pattern as the
       rest of the cluster.
+
+
+## Phase A — Topology from live configuration (2026-08-22)
+- [x] A1 `GET /api/topology/discover`: links inferred by /30 pairing over the
+      live interface cache; dangling detection; nodes with reachability.
+      **Verified:** 10/10 reachable, 17 planned links discovered PLUS 6
+      unplanned 10.255.x links (real config the plan doesn't know) —
+      discovery reports true state. Dangling proven during mid-repair.
+- [x] A2 Topology screen: `◉ live (discovered)` is the DEFAULT view (30s
+      poll); `▤ plan` overlay toggle; dangling links as dashed-yellow stubs;
+      unreachable nodes red-dashed. Full-bleed canvas, persisted layout,
+      live hovers unchanged. **Verified** via deployed bundle + SPA origin
+      (23 links, 10 nodes up).
+- [ ] A3 Lab snapshots (Phase B of the validated plan) — next.
