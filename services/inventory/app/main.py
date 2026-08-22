@@ -17,6 +17,10 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from db import InventoryDB
+from restor8_core.jsonlog import setup_logging
+
+# JSON lines from the first log call on (no root logging config existed).
+setup_logging("inventory")
 
 app = FastAPI(
     title="restor8 inventory",

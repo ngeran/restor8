@@ -914,6 +914,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "gitpython" },
     { name = "httpx" },
+    { name = "restor8-core" },
     { name = "uvicorn" },
 ]
 
@@ -922,6 +923,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "gitpython" },
     { name = "httpx" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]
 
@@ -934,6 +936,7 @@ dependencies = [
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pyyaml" },
+    { name = "restor8-core" },
     { name = "uvicorn" },
 ]
 
@@ -943,6 +946,7 @@ requires-dist = [
     { name = "httpx" },
     { name = "jinja2" },
     { name = "pyyaml" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]
 
@@ -991,6 +995,7 @@ source = { virtual = "services/gateway" }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "restor8-core" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
@@ -999,6 +1004,7 @@ dependencies = [
 requires-dist = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
     { name = "websockets" },
 ]
@@ -1009,12 +1015,14 @@ version = "0.1.0"
 source = { virtual = "services/inventory" }
 dependencies = [
     { name = "fastapi" },
+    { name = "restor8-core" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]
 
@@ -1068,6 +1076,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pyyaml" },
+    { name = "restor8-core" },
     { name = "uvicorn" },
 ]
 
@@ -1076,6 +1085,7 @@ requires-dist = [
     { name = "fastapi" },
     { name = "httpx" },
     { name = "pyyaml" },
+    { name = "restor8-core", editable = "libs/restor8_core" },
     { name = "uvicorn" },
 ]
 

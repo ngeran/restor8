@@ -37,6 +37,7 @@ from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from db import RunDB
 from restor8_core.jsnapy_runner import compare
+from restor8_core.jsonlog import setup_logging
 
 INVENTORY_URL = "http://restor8-inventory:8080"
 CONNECTOR_URL = "http://restor8-connector:8080"
@@ -51,7 +52,7 @@ _ENV = Environment(
 )
 
 log = logging.getLogger("restor8.scenario")
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+setup_logging("scenario")
 
 # Phase records also go to the gateway (Phase 6 live feed) — best-effort
 # on a worker thread, identical rules to restor8_core's device-event relay.

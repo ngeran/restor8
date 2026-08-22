@@ -184,9 +184,16 @@ early, prove it often.
       seconds to reconcile new path rules.
 
 ## Phase 8 — Deploy + harden
-- [ ] `manifests/` per service in ns `restor8`, Ingress `restor8.home`
-      (existing Traefik pattern).
-- [ ] `just doctor` / `just check` clean across every service.
+- [x] `manifests/` per service in ns `restor8`, Ingress `restor8.home`
+      (existing Traefik pattern). **Landed in flight** — all 9 deployments
+      (8 services + frontend) live; `manifests/ingress.yaml` routes
+      `restor8.home` → SPA + `/api`/`/ws` → gateway, with
+      connector/inventory subdomains for direct wire-testing.
+- [x] `just doctor` / `just check` clean across every service.
+      **2026-08-20** — gate sweep: gateway E402 (hoisted `re`/`time`),
+      `JunosConnection.rpc(**kwargs)` widened `str` → `str | bool` (its own
+      docstring always documented `terse=True`), `_parse_interfaces` typing.
+      ruff strict + mypy green across core + all 8 services; doctor ready.
 - [ ] Observability: structured JSON logs from each service into the existing
       ARGO/PULSE stack (Prometheus/Grafana/Loki) — same scrape pattern as the
       rest of the cluster.

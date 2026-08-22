@@ -24,6 +24,12 @@ from fastapi import FastAPI, HTTPException
 from git import Actor, Repo
 from pydantic import BaseModel
 
+from restor8_core.jsonlog import setup_logging
+
+# JSON lines from the first log call on — this service previously had no
+# root logging config at all, so INFO logs never reached stdout.
+setup_logging("backup")
+
 INVENTORY_URL = os.environ.get("INVENTORY_URL", "http://restor8-inventory:8080")
 CONNECTOR_URL = os.environ.get("CONNECTOR_URL", "http://restor8-connector:8080")
 REPO_PATH = os.environ.get("BACKUP_REPO", "/tmp/backup-repo")

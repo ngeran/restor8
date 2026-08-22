@@ -13,4 +13,8 @@ dependencies = [
     "uvicorn",
     "httpx",
     "pyyaml",
+    "restor8-core",  # jsonlog (structured logging) since Phase 8
 ]
+
+[tool.uv.sources]
+restor8-core = { workspace = true }

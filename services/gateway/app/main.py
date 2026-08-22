@@ -22,13 +22,17 @@ import asyncio
 import json
 import logging
 import os
+import re
+import time
 from typing import Any
 
 import httpx
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
+from restor8_core.jsonlog import setup_logging
+
 log = logging.getLogger("restor8.gateway")
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+setup_logging("gateway")
 
 INVENTORY_URL = os.environ.get("INVENTORY_URL", "http://restor8-inventory:8080")
 CONNECTOR_URL = os.environ.get("CONNECTOR_URL", "http://restor8-connector:8080")
@@ -277,20 +281,18 @@ async def upsert_credential(body: dict[str, Any]) -> Any:
 # never the wire. Whitespace-tolerant parsing throughout: cRPD puts
 # newlines inside its XML tags (the recurring theme).
 
-import re as _re
-import time as _time
-
 _iface_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def _parse_interfaces(xml: str) -> dict[str, dict[str, Any]]:
     """terse interface-information XML → {iface: {addrs: [...], oper}}}."""
     out: dict[str, dict[str, Any]] = {}
-    for block in _re.findall(r"<physical-interface>([\s\S]*?)</physical-interface>", xml):
-        name = (_re.search(r"<name>\s*([^\s<]+)", block) or [None, ""])[1]
-        oper = _re.search(r"<oper-status>\s*(\S+)", block)
+    for block in re.findall(r"<physical-interface>([\s\S]*?)</physical-interface>", xml):
+        m = re.search(r"<name>\s*([^\s<]+)", block)
+        name = m.group(1) if m else ""
+        oper = re.search(r"<oper-status>\s*(\S+)", block)
         addrs = [
-            a for a in _re.findall(r"<ifa-local>\s*([\d.]+/\d+)\s*</ifa-local>", block)
+            a for a in re.findall(r"<ifa-local>\s*([\d.]+/\d+)\s*</ifa-local>", block)
             if ":" not in a  # skip inet6
         ]
         out[name] = {"addrs": addrs, "oper": oper.group(1) if oper else None}
@@ -305,7 +307,7 @@ async def interfaces() -> Any:
     hover shows "unreachable" rather than stale-guessing.
     """
     cached = _iface_cache.get("all")
-    if cached and _time.monotonic() - cached[0] < 30:
+    if cached and time.monotonic() - cached[0] < 30:
         return cached[1]
 
     devices = await _proxy(f"{INVENTORY_URL}/devices")
@@ -330,9 +332,92 @@ async def interfaces() -> Any:
             return dev["name"], {"error": str(exc)[:120]}
 
     results = await asyncio.gather(*(one(d) for d in devices))
-    payload = {"at": _time.time(), "devices": dict(results)}
-    _iface_cache["all"] = (_time.monotonic(), payload)
+    payload = {"at": time.time(), "devices": dict(results)}
+    _iface_cache["all"] = (time.monotonic(), payload)
     return payload
+
+
+# ── topology discovery: the lab inferred FROM live configuration ────────
+#
+# The objective (validated 2026-08-22): the diagram must be built from
+# what the devices actually run, not from a hand-maintained plan. Links
+# are inferred by segment math over live interface tables: two devices
+# holding host addresses of the same /30 are connected. No plan involved.
+
+
+def _ip_to_int(ip: str) -> int:
+    parts = ip.split(".")
+    return (int(parts[0]) << 24) + (int(parts[1]) << 16) + (int(parts[2]) << 8) + int(parts[3])
+
+
+def _discover_links(devices_state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Infer p2p links: same /30, different devices (or loop-pairs)."""
+    # segment -> [(device, iface, ip)] for every IPv4 address that isn't
+    # mgmt (eth0/172.20 bridge) or loopback (lo/127.*)
+    by_segment: dict[int, list[tuple[str, str, str]]] = {}
+    for dev, info in devices_state.items():
+        for iface, data in (info.get("interfaces") or {}).items():
+            if iface in ("lo", "eth0"):
+                continue
+            for addr in data.get("addrs", []):
+                ip, _, plen = addr.partition("/")
+                if plen != "30":
+                    continue  # only p2p /30s form links (lab convention)
+                net = _ip_to_int(ip) & 0xFFFFFFFC
+                by_segment.setdefault(net, []).append((dev, iface, ip))
+
+    links: list[dict[str, Any]] = []
+    for net, ends in by_segment.items():
+        uniq = {(d, i) for d, i, _ in ends}
+        seg_ip = f"{(net >> 24) & 255}.{(net >> 16) & 255}.{(net >> 8) & 255}.0/30"
+        if len(uniq) == 2:
+            (da, ia, *_), (db, ib, *_) = sorted(uniq)
+            ipa = next(ip for d, i, ip in ends if d == da and i == ia)
+            ipb = next(ip for d, i, ip in ends if d == db and i == ib)
+            links.append(
+                {"a": da, "a_if": ia, "a_ip": f"{ipa}/30",
+                 "b": db, "b_if": ib, "b_ip": f"{ipb}/30",
+                 "segment": seg_ip, "state": "up"}
+            )
+        elif len(uniq) == 1:
+            # configured but unpaired — a dangling link: real drift signal
+            dev, iface = next(iter(uniq))
+            ip = next(ip for d, i, ip in ends if d == dev and i == iface)
+            links.append(
+                {"a": dev, "a_if": iface, "a_ip": f"{ip}/30",
+                 "b": None, "b_if": None, "b_ip": None,
+                 "segment": seg_ip, "state": "dangling"}
+            )
+    return links
+
+
+@app.get("/api/topology/discover")
+async def discover() -> Any:
+    """Discovered lab map: nodes from inventory, links FROM live configs.
+
+    Reads the same 30s interface cache the hover uses; unreachable
+    devices appear as nodes with ``state: unreachable`` so the map never
+    silently shrinks.
+    """
+    devices = await _proxy(f"{INVENTORY_URL}/devices")
+    cached = _iface_cache.get("all")
+    live = cached[1]["devices"] if cached and time.monotonic() - cached[0] < 60 else None
+    if live is None:
+        live = (await interfaces())["devices"]
+
+    nodes = []
+    for d in devices:
+        state = live.get(d["name"], {})
+        nodes.append({
+            "name": d["name"], "id": d["id"], "platform": d["platform"],
+            "mgmt": d["mgmt_ip"],
+            "state": "unreachable" if "error" in state else "up",
+        })
+    return {
+        "at": time.time(),
+        "nodes": nodes,
+        "links": _discover_links({name: s for name, s in live.items() if "error" not in s}),
+    }
 
 
 @app.get("/api/session/{session_id}")

@@ -22,6 +22,11 @@ from fastapi import FastAPI, HTTPException
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 from pydantic import BaseModel, Field
 
+from restor8_core.jsonlog import setup_logging
+
+# JSON lines from the first log call on (no root logging config existed).
+setup_logging("config")
+
 INVENTORY_URL = os.environ.get("INVENTORY_URL", "http://restor8-inventory:8080")
 CONNECTOR_URL = os.environ.get("CONNECTOR_URL", "http://restor8-connector:8080")
 TOPOLOGY_URL = os.environ.get("TOPOLOGY_URL", "http://restor8-topology:8080")

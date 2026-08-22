@@ -208,7 +208,7 @@ class JunosConnection:
             rpc = self._dev.rpc.get_config(options={"format": fmt})
             return "".join(rpc.itertext()).strip()
 
-    def rpc(self, name: str, **kwargs: str) -> str:
+    def rpc(self, name: str, **kwargs: str | bool) -> str:
         """Run an operational RPC by name; return its XML as text.
 
         The generic read surface for validation snapshots (restore's

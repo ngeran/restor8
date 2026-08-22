@@ -27,6 +27,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from restor8_core.events import DeviceEvent, relay_sink
+from restor8_core.jsonlog import setup_logging
 from restor8_core.junos import ConfigFormat, ConfigMode, JunosConnection
 from restor8_core.models import Restor8Error
 
@@ -35,8 +36,8 @@ events_log = logging.getLogger("restor8.events")
 
 # Make progress events visible under stock uvicorn (its default config only
 # configures its own loggers — without this, INFO events have no handler
-# and never reach stdout). One JSON object per line, ready for Loki.
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+# and never reach stdout). JSON lines, ready for Loki.
+setup_logging("connector")
 
 # The NETCONF/SSH transports chat at INFO (every RPC exchange, paramiko
 # banners) and drown the event stream in pod logs. restor8.events is the
