@@ -210,4 +210,21 @@ early, prove it often.
       unreachable nodes red-dashed. Full-bleed canvas, persisted layout,
       live hovers unchanged. **Verified** via deployed bundle + SPA origin
       (23 links, 10 nodes up).
-- [ ] A3 Lab snapshots (Phase B of the validated plan) — next.
+- [ ] A3 Lab snapshots → moved to Phase B below.
+
+## Phase B — Lab config management (snapshots) (2026-08-22)
+- [x] B1 backup service: `POST /snapshots?name=` (atomic: ALL devices,
+      one commit each + `snapshots/<name>.yml` index of per-device SHAs —
+      any failure records nothing), `GET /snapshots`. Gateway proxies.
+      **Verified:** `phase-b-baseline` taken — 10 devices, 10 SHAs indexed.
+- [x] B2 `POST /snapshots/{name}/restore` — every device pushed back to
+      its recorded SHA (override, set-format, confirmed-commit finalised),
+      per-device results, failures don't halt the fleet.
+      **Verified break/fix:** deleted ce2's eth1 address → lab restore →
+      9/10 ok, ce2 healed (10.10.64.1/30 returned). P-1 failed with a
+      content-specific CommitError (its snapshotted OSPF stanza references
+      an interface the override removes — cRPD commit-check quirk); the
+      restore PATH is proven, P-1's config content needs a manual look.
+- [x] B3 Labs screen: "lab snapshots" section — take (named), list
+      (time/devices), `↩ restore lab` behind a ConfirmModal, per-device
+      results. **Verified** in deployed bundle + SPA origin.

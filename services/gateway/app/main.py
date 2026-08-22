@@ -420,6 +420,32 @@ async def discover() -> Any:
     }
 
 
+@app.get("/api/snapshots")
+async def snapshots() -> Any:
+    """Named lab states."""
+    return await _proxy(f"{BACKUP_URL}/snapshots")
+
+
+@app.post("/api/snapshots")
+async def take_snapshot(name: str) -> Any:
+    """Back up every device now, record as one named snapshot."""
+    async with httpx.AsyncClient(timeout=900) as client:
+        r = await client.post(f"{BACKUP_URL}/snapshots?name={name}")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
+@app.post("/api/snapshots/{name}/restore")
+async def restore_snapshot(name: str) -> Any:
+    """Restore the whole lab to a recorded state."""
+    async with httpx.AsyncClient(timeout=900) as client:
+        r = await client.post(f"{BACKUP_URL}/snapshots/{name}/restore")
+    if r.status_code >= 400:
+        raise HTTPException(r.status_code, r.json().get("detail"))
+    return r.json()
+
+
 @app.get("/api/session/{session_id}")
 async def session_status(session_id: str) -> Any:
     """Status of a held session: host + seconds left in the window."""

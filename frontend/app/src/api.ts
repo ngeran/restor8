@@ -74,6 +74,9 @@ export const api = {
     nodes: { name: string; id: number; platform: string; mgmt: string; state: string }[];
     links: { a: string; a_if: string; a_ip: string; b: string | null; b_if: string | null; b_ip: string | null; segment: string; state: string }[];
   }>(r)),
+  snapshots: () => fetch("/api/snapshots").then((r) => j<{ name: string; at: string; devices: number; shas: Record<string, string> }[]>(r)),
+  takeSnapshot: (name: string) => post<{ name: string; at: string; devices: number; shas: Record<string, string> }>(`/api/snapshots?name=${encodeURIComponent(name)}`),
+  restoreSnapshot: (name: string) => post<{ snapshot: string; restored: number; failed: number; nodes: { device: string; ok: boolean; diff_lines: number; error: string }[] }>(`/api/snapshots/${name}/restore`),
   credentials: () => fetch("/api/credentials").then((r) => j<{ name: string; user: string }[]>(r)),
   upsertCredential: (name: string, user: string, password: string) =>
     post<{ name: string; user: string }>("/api/credentials", { name, user, password }),

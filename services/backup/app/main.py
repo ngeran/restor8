@@ -243,6 +243,189 @@ def config_at(device_id: int, sha: str) -> BackupContent:
     return BackupContent(device=str(device["name"]), sha=hexsha, date=date, config=content)
 
 
+# ── lab snapshots: whole-lab named states ───────────────────────────────
+#
+# The objective (validated 2026-08-22): back up SELECTED devices as one
+# named state ("lab-mpls-1"), switch the same topology between labs, and
+# restore the lab to a previous state at any time. A snapshot = one backup
+# commit per device + an index file (snapshots/<name>.yml) recording each
+# device's SHA — restore replays exactly those SHAs.
+
+
+class SnapshotSummary(BaseModel):
+    """One named lab state."""
+
+    name: str
+    at: str
+    devices: int
+    shas: dict[str, str]
+
+
+class RestoreNodeResult(BaseModel):
+    device: str
+    ok: bool
+    diff_lines: int = 0
+    error: str = ""
+
+
+class SnapshotRestoreResult(BaseModel):
+    snapshot: str
+    restored: int
+    failed: int
+    nodes: list[RestoreNodeResult]
+
+
+def _snap_path(name: str) -> Path:
+    if not name or "/" in name or " " in name:
+        raise HTTPException(422, "snapshot names: letters, digits, dashes only")
+    return Path(REPO_PATH) / "snapshots" / f"{name}.yml"
+
+
+def _pull(device: dict[str, object]) -> str:
+    """Pull a device's running config through connector (shared with /backup)."""
+    r = httpx.post(
+        f"{CONNECTOR_URL}/config",
+        json={"host": device["mgmt_ip"], "port": device["port"], "auth_ref": device["auth_ref"], "fmt": "set"},
+        timeout=180,
+    )
+    if r.status_code != 200:
+        raise RuntimeError(str(r.json().get("detail", {}).get("message", r.status_code))[:150])
+    return r.json()["config"]
+
+
+@app.post("/snapshots", response_model=SnapshotSummary, status_code=201)
+def take_snapshot(name: str) -> SnapshotSummary:
+    """Back up EVERY device now and record the state as one named snapshot.
+
+    Raises:
+        HTTPException 422: bad name.
+        HTTPException 502: any device unreachable (snapshot is atomic —
+            a partial lab state would be a lie, so nothing is recorded).
+    """
+    import yaml as _yaml
+
+    try:
+        devices = httpx.get(f"{INVENTORY_URL}/devices", timeout=15).json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"inventory unreachable: {exc}") from exc
+
+    shas: dict[str, str] = {}
+    with _git_lock:
+        repo = _repo()
+        for dev in devices:
+            config = _pull(dev)
+            rel = f"devices/{dev['name']}/running.cfg"
+            absolute = Path(REPO_PATH) / rel
+            absolute.parent.mkdir(parents=True, exist_ok=True)
+            absolute.write_text(config)
+            repo.index.add([rel])
+            ts = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+            commit = repo.index.commit(
+                f"snapshot {name}: {dev['name']} @ {ts}", author=_ACTOR, committer=_ACTOR
+            )
+            shas[str(dev["name"])] = commit.hexsha[:12]
+        at = datetime.datetime.now(datetime.UTC).isoformat()
+        _snap_path(name).parent.mkdir(parents=True, exist_ok=True)
+        _snap_path(name).write_text(_yaml.safe_dump({"name": name, "at": at, "shas": shas}))
+        repo.index.add([f"snapshots/{name}.yml"])
+        repo.index.commit(f"snapshot index: {name}", author=_ACTOR, committer=_ACTOR)
+    return SnapshotSummary(name=name, at=at, devices=len(shas), shas=shas)
+
+
+@app.get("/snapshots", response_model=list[SnapshotSummary])
+def list_snapshots() -> list[SnapshotSummary]:
+    """All named lab states, newest first."""
+    import yaml as _yaml
+
+    out: list[SnapshotSummary] = []
+    snap_dir = Path(REPO_PATH) / "snapshots"
+    if not snap_dir.exists():
+        return []
+    for f in sorted(snap_dir.glob("*.yml"), reverse=True):
+        try:
+            d = _yaml.safe_load(f.read_text()) or {}
+            out.append(SnapshotSummary(
+                name=str(d.get("name", f.stem)), at=str(d.get("at", "")),
+                devices=len(d.get("shas", {})), shas=dict(d.get("shas", {})),
+            ))
+        except ValueError:
+            continue
+    return out
+
+
+@app.post("/snapshots/{name}/restore", response_model=SnapshotRestoreResult)
+def restore_snapshot(name: str) -> SnapshotRestoreResult:
+    """Restore EVERY device to its recorded SHA — the lab, back in time.
+
+    Each device: fetch its config at the recorded commit, push via
+    connector (override, set-format, confirmed-commit finalised), report
+    the applied diff. Sequential; one device's failure doesn't stop the
+    rest (a half-restored lab must still converge).
+    """
+    import yaml as _yaml
+
+    snap = _snap_path(name)
+    if not snap.exists():
+        raise HTTPException(404, f"unknown snapshot '{name}'")
+    d = _yaml.safe_load(snap.read_text()) or {}
+    shas: dict[str, str] = dict(d.get("shas", {}))
+    if not shas:
+        raise HTTPException(422, f"snapshot '{name}' records no devices")
+
+    with _git_lock:
+        repo = _repo()
+        configs: dict[str, str] = {}
+        for dev_name, sha in shas.items():
+            try:
+                blob = repo.commit(sha).tree / f"devices/{dev_name}/running.cfg"
+                configs[dev_name] = blob.data_stream.read().decode()
+            except (KeyError, TypeError, ValueError) as exc:
+                raise HTTPException(500, f"snapshot {name}: config for {dev_name} unreadable") from exc
+
+    try:
+        devices = httpx.get(f"{INVENTORY_URL}/devices", timeout=15).json()
+    except httpx.HTTPError as exc:
+        raise HTTPException(502, f"inventory unreachable: {exc}") from exc
+    by_name = {str(dev["name"]): dev for dev in devices}
+
+    results: list[RestoreNodeResult] = []
+    for dev_name, config in configs.items():
+        dev = by_name.get(dev_name)
+        if dev is None:
+            results.append(RestoreNodeResult(device=dev_name, ok=False, error="not in inventory"))
+            continue
+        try:
+            r = httpx.post(
+                f"{CONNECTOR_URL}/push",
+                json={
+                    "host": dev["mgmt_ip"], "port": dev["port"], "auth_ref": dev["auth_ref"],
+                    "payload": config, "fmt": "set", "mode": "override",
+                    "comment": f"restor8-snapshot: restore {name}", "confirm_now": True,
+                },
+                timeout=300,
+            )
+        except httpx.HTTPError as exc:
+            results.append(RestoreNodeResult(device=dev_name, ok=False, error=str(exc)[:150]))
+            continue
+        if r.status_code != 200:
+            results.append(RestoreNodeResult(
+                device=dev_name, ok=False,
+                error=str(r.json().get("detail", {}).get("message", r.status_code))[:150],
+            ))
+            continue
+        diff = r.json().get("diff", "")
+        changed = sum(1 for line in diff.splitlines()
+                      if line[:1] in "+-" and line[:3] not in ("+++", "---"))
+        results.append(RestoreNodeResult(device=dev_name, ok=True, diff_lines=changed))
+
+    return SnapshotRestoreResult(
+        snapshot=name,
+        restored=sum(1 for x in results if x.ok),
+        failed=sum(1 for x in results if not x.ok),
+        nodes=results,
+    )
+
+
 @app.get("/backup/{device_id}/history", response_model=list[HistoryEntry])
 def history(device_id: int) -> list[HistoryEntry]:
     """Commit history for one device's config file.
